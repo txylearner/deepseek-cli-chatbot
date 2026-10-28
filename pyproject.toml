@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deepseek-chatbot"
+version = "0.1.0"
+description = "A DeepSeek-powered command-line chatbot with multi-turn conversation and streaming output."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.40.0,<2.0.0",
+    "pydantic-settings>=2.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+chatbot = "chatbot.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chatbot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
