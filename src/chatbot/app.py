@@ -1,0 +1,103 @@
+"""FastAPI 应用：把聊天机器人暴露成 HTTP 接口。
+
+职责划分：
+    store.py  负责“数据在哪”
+    app.py    负责“HTTP 怎么进、怎么出”
+    llm.py    负责“怎么和模型说话”
+"""
+
+from __future__ import annotations
+
+from fastapi import Depends, FastAPI, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from . import __version__
+from .config import get_settings
+from .llm import complete_chat
+from .store import SessionStore
+
+app = FastAPI(
+    title="DeepSeek 对话机器人 API",
+    description="由命令行聊天机器人改造而来的 HTTP 服务。",
+    version=__version__,
+)
+
+# 全局状态挂在 app.state 上：
+#   store        —— 内存会话仓库
+#   model_client —— 测试用的注入点，生产环境保持 None（由 settings 现建真实客户端）
+app.state.store = SessionStore()
+app.state.model_client = None
+
+
+def get_store(request: Request) -> SessionStore:
+    """依赖：取出当前应用的内存会话仓库。"""
+    return request.app.state.store
+
+
+def get_model_client(request: Request):
+    """依赖：取出可注入的模型客户端；生产环境返回 None。"""
+    return request.app.state.model_client
+
+
+class ChatRequest(BaseModel):
+    session_id: str = Field(description="由调用方提供的会话 ID")
+    message: str = Field(description="用户这一轮说的话")
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    reply: str
+
+
+@app.get("/health", summary="健康检查")
+def health() -> dict[str, str]:
+    return {"status": "ok", "version": __version__}
+
+
+@app.post("/chat", response_model=ChatResponse, summary="一问一答")
+def chat(
+    payload: ChatRequest,
+    store: SessionStore = Depends(get_store),
+    client=Depends(get_model_client),
+) -> ChatResponse:
+    """接收一条消息，返回模型回复，并把这一轮写进会话历史。"""
+    session_id = payload.session_id.strip()
+    message = payload.message.strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id 不能为空")
+    if not message:
+        raise HTTPException(status_code=400, detail="message 不能为空")
+
+    store.get_or_create(session_id)
+    store.add_message(session_id, "user", message)
+    try:
+        reply = complete_chat(store.build_messages(session_id), get_settings(), client=client)
+    except Exception as exc:  # noqa: BLE001 - 统一转成 502，避免把 Key 等细节抛给调用方
+        store.drop_last_message(session_id)
+        raise HTTPException(status_code=502, detail=f"模型调用失败：{type(exc).__name__}") from exc
+    store.add_message(session_id, "assistant", reply)
+    return ChatResponse(session_id=session_id, reply=reply)
+
+
+@app.get("/sessions", summary="会话 ID 列表")
+def list_sessions(store: SessionStore = Depends(get_store)) -> dict[str, list[str]]:
+    return {"sessions": store.list_ids()}
+
+
+@app.get("/sessions/{session_id}/messages", summary="某会话的消息记录")
+def list_messages(
+    session_id: str, store: SessionStore = Depends(get_store)
+) -> dict[str, object]:
+    messages = store.messages(session_id)
+    if messages is None:
+        raise HTTPException(status_code=404, detail=f"会话不存在：{session_id}")
+    return {"session_id": session_id, "messages": messages}
+
+
+@app.delete("/sessions/{session_id}", summary="清空会话")
+def clear_session(
+    session_id: str, store: SessionStore = Depends(get_store)
+) -> dict[str, object]:
+    if not store.clear(session_id):
+        raise HTTPException(status_code=404, detail=f"会话不存在：{session_id}")
+    return {"session_id": session_id, "deleted": True}
