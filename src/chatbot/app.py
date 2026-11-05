@@ -9,9 +9,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -19,6 +21,8 @@ from .config import get_settings
 from .llm import complete_chat, stream_chat
 from .store import SessionStore
 from .study import build_word_messages
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(
     title="DeepSeek 对话机器人 API",
@@ -169,3 +173,7 @@ def clear_session(
     if not store.clear(session_id):
         raise HTTPException(status_code=404, detail=f"会话不存在：{session_id}")
     return {"session_id": session_id, "deleted": True}
+
+# 挂载必须放在所有路由之后：/docs、/chat 等接口优先匹配，
+# 没被接口占用的路径才会落到静态页面（"/" 返回聊天界面）。
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="web-ui")
