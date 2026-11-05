@@ -12,7 +12,8 @@ DeepSeek 提供 OpenAI 兼容接口，所以客户端仍然用 `openai` 包 + �
 - `POST /chat/stream` 流式输出（`stream=True` + `StreamingResponse`）
 - `POST /study/word` 学习功能：英语单词讲解
 - 配置集中在 `src/chatbot/config.py`，API Key 用 `SecretStr` 保护
-- 13 个离线测试，不联网、不需要真实 API Key
+- 自带一个简洁的网页聊天界面（侧边栏会话列表 + 流式打字 + Markdown 渲染）
+- 16 个离线测试，不联网、不需要真实 API Key
 
 ## 环境要求
 
@@ -42,8 +43,25 @@ CHATBOT_API_KEY=sk-你的真实Key
 python -m uvicorn chatbot.app:app --reload --port 8000
 ```
 
-- 浏览器打开 <http://127.0.0.1:8000/docs> 可以直接点 **Try it out** 调接口
+- 浏览器打开 <http://127.0.0.1:8000/> 就是**聊天界面**（平时用这个）
+- <http://127.0.0.1:8000/docs> 是接口文档，可以点 **Try it out** 逐个调试（答辩时给老师看）
 - 健康检查：<http://127.0.0.1:8000/health>
+
+## 网页聊天界面
+
+打开 <http://127.0.0.1:8000/> 即可，不需要额外装前端工具、也不联网加载任何 CDN：
+
+- 左侧是会话列表：**＋ 新对话**、点击切换历史会话、悬停出现 **×** 删除
+- 中间是对话区：用户消息靠右显示气泡，助手回复靠左逐字流出（走 `POST /chat/stream`）
+- 底部是输入框：**Enter 发送**、**Shift+Enter 换行**，生成中按钮变成 ■ 可随时停止
+- 右上角 **清空** 删除当前会话，**☀️/🌙** 切换深色/浅色主题（记在 localStorage 里）
+- 助手回复支持 Markdown：标题、粗体、列表、行内代码、代码块、引用、链接
+
+实现只有一个文件 `src/chatbot/static/index.html`（HTML + CSS + 原生 JS，约 540 行），
+由 `app.py` 末尾的 `app.mount("/", StaticFiles(...))` 提供；因为挂在最后，
+`/docs`、`/chat` 等接口仍然优先匹配。
+
+> 学习功能 `POST /study/word` 目前只提供接口，界面里没有入口（作业要求是"通过 API 提供"）。
 
 ## 接口说明
 
@@ -127,7 +145,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: applicati
 python -m pytest -q
 ```
 
-13 个用例全部离线：用 `TestClient` + 假模型客户端，不联网、不需要真实 Key。
+16 个用例全部离线：用 `TestClient` + 假模型客户端，不联网、不需要真实 Key。
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -144,7 +162,9 @@ python -m pytest -q
 ├── pyproject.toml
 ├── .env.example
 ├── src/chatbot/
-│   ├── app.py        # FastAPI 应用与路由
+│   ├── app.py        # FastAPI 应用与路由（末尾挂载静态页面）
+│   ├── static/
+│   │   └── index.html  # 单文件聊天界面（HTML + CSS + 原生 JS）
 │   ├── store.py      # 内存会话仓库（唯一读写会话的地方）
 │   ├── study.py      # 学习功能：单词讲解提示词
 │   ├── llm.py        # DeepSeek 调用（流式 + 一次性）
@@ -157,6 +177,7 @@ python -m pytest -q
     ├── test_api_chat.py
     ├── test_api_sessions.py
     ├── test_api_stream.py
+    ├── test_web_ui.py
     ├── test_config.py
     └── test_llm.py
 ```
