@@ -35,5 +35,9 @@ Thumbs.db
 # Logs
 *.log
 
-# 课程材料（不提交）
-作业要求.pdf
+# 课程材料与本地笔记（不提交）
+*.pdf
+操作步骤.md
+chatbot_api.txt
+原理.txt
+演示命令.txt
