@@ -15,6 +15,7 @@ from . import __version__
 from .config import get_settings
 from .llm import complete_chat
 from .store import SessionStore
+from .study import build_word_messages
 
 app = FastAPI(
     title="DeepSeek 对话机器人 API",
@@ -49,6 +50,15 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class WordRequest(BaseModel):
+    word: str = Field(description="要讲解的英语单词")
+
+
+class WordResponse(BaseModel):
+    word: str
+    explanation: str
+
+
 @app.get("/health", summary="健康检查")
 def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
@@ -77,6 +87,22 @@ def chat(
         raise HTTPException(status_code=502, detail=f"模型调用失败：{type(exc).__name__}") from exc
     store.add_message(session_id, "assistant", reply)
     return ChatResponse(session_id=session_id, reply=reply)
+
+
+@app.post("/study/word", response_model=WordResponse, summary="学习功能：单词讲解")
+def explain_word(
+    payload: WordRequest,
+    client=Depends(get_model_client),
+) -> WordResponse:
+    """把单词交给一个“英语老师”提示词，返回中文讲解 + 例句。"""
+    word = payload.word.strip()
+    if not word:
+        raise HTTPException(status_code=400, detail="word 不能为空")
+    try:
+        explanation = complete_chat(build_word_messages(word), get_settings(), client=client)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"模型调用失败：{type(exc).__name__}") from exc
+    return WordResponse(word=word, explanation=explanation)
 
 
 @app.get("/sessions", summary="会话 ID 列表")
