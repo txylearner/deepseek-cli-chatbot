@@ -45,3 +45,15 @@ def stream_chat(
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
+
+def complete_chat(
+    messages: list[dict[str, str]],
+    settings: Settings,
+    client: OpenAI | None = None,
+) -> str:
+    """把流式片段拼成完整回复。
+
+    /chat 这类一次性返回的接口用它；实现上仍然走 stream_chat，
+    这样一次性接口和流式接口共用同一段模型调用逻辑。
+    """
+    return "".join(stream_chat(messages, settings, client=client))
