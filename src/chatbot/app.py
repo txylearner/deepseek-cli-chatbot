@@ -8,13 +8,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import __version__
 from .config import get_settings
-from .llm import complete_chat
+from .llm import complete_chat, stream_chat
 from .store import SessionStore
+from .study import build_word_messages
 
 app = FastAPI(
     title="DeepSeek 对话机器人 API",
@@ -49,6 +53,15 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class WordRequest(BaseModel):
+    word: str = Field(description="要讲解的英语单词")
+
+
+class WordResponse(BaseModel):
+    word: str
+    explanation: str
+
+
 @app.get("/health", summary="健康检查")
 def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
@@ -77,6 +90,61 @@ def chat(
         raise HTTPException(status_code=502, detail=f"模型调用失败：{type(exc).__name__}") from exc
     store.add_message(session_id, "assistant", reply)
     return ChatResponse(session_id=session_id, reply=reply)
+
+
+@app.post("/chat/stream", summary="流式一问一答")
+def chat_stream(
+    payload: ChatRequest,
+    store: SessionStore = Depends(get_store),
+    client=Depends(get_model_client),
+) -> StreamingResponse:
+    """/chat 的流式版本：请求体相同，响应是逐块输出的纯文本。
+
+    用 StreamingResponse 边收边发；生成器结束（正常或异常）时把已收到的
+    内容写回历史，保证两个接口的会话记录一致。
+    """
+    session_id = payload.session_id.strip()
+    message = payload.message.strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id 不能为空")
+    if not message:
+        raise HTTPException(status_code=400, detail="message 不能为空")
+
+    store.get_or_create(session_id)
+    store.add_message(session_id, "user", message)
+    messages = store.build_messages(session_id)
+    settings = get_settings()
+
+    def generate() -> Iterator[str]:
+        chunks: list[str] = []
+        try:
+            for delta in stream_chat(messages, settings, client=client):
+                chunks.append(delta)
+                yield delta
+        finally:
+            # 正常结束、报错、客户端断开都会走到这里，保证历史不丢
+            if chunks:
+                store.add_message(session_id, "assistant", "".join(chunks))
+            else:
+                store.drop_last_message(session_id)
+
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
+
+
+@app.post("/study/word", response_model=WordResponse, summary="学习功能：单词讲解")
+def explain_word(
+    payload: WordRequest,
+    client=Depends(get_model_client),
+) -> WordResponse:
+    """把单词交给一个“英语老师”提示词，返回中文讲解 + 例句。"""
+    word = payload.word.strip()
+    if not word:
+        raise HTTPException(status_code=400, detail="word 不能为空")
+    try:
+        explanation = complete_chat(build_word_messages(word), get_settings(), client=client)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"模型调用失败：{type(exc).__name__}") from exc
+    return WordResponse(word=word, explanation=explanation)
 
 
 @app.get("/sessions", summary="会话 ID 列表")
