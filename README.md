@@ -1,262 +1,201 @@
-# DeepSeek 命令行聊天机器人
+# DeepSeek 对话机器人（FastAPI 版）
 
-一个用于课程作业的简易 AI Agent：通过 DeepSeek 的 OpenAI 兼容接口进行多轮对话，并支持流式输出。
+第 2 次作业是命令行聊天机器人；这次把它改造成 **HTTP 服务**：支持多轮连续对话、流式输出、
+会话管理和一个学习小功能，会话数据先放在内存里。
+
+DeepSeek 提供 OpenAI 兼容接口，所以客户端仍然用 `openai` 包 + 自定义 `base_url`。
 
 ## 功能
 
-- 多轮连续对话，始终保留 system prompt
-- 流式输出（调用模型时开启 `stream=True`，逐块打印）
-- 使用 `pydantic-settings` 从环境变量和 `.env` 读取配置
-- API Key 使用 `SecretStr`，打印配置时不会出现明文
-- 缺少 API Key 时给出可读提示并退出
-- 自动裁剪历史，默认保留最近 20 轮
-- 两个完全离线的 pytest 测试模块，不需要真实 API Key
+- `POST /chat` 一问一答，按 `session_id` 维护多轮历史
+- `GET /sessions`、`GET /sessions/{id}/messages`、`DELETE /sessions/{id}` 会话管理
+- `POST /chat/stream` 流式输出（`stream=True` + `StreamingResponse`）
+- `POST /study/word` 学习功能：英语单词讲解
+- 配置集中在 `src/chatbot/config.py`，API Key 用 `SecretStr` 保护
+- 13 个离线测试，不联网、不需要真实 API Key
 
 ## 环境要求
 
 - Python 3.12+
 - DeepSeek API Key：<https://platform.deepseek.com/api_keys>
 
-## 快速开始
-
-> 先进入**项目根目录**，也就是能看到 `pyproject.toml`、`src`、`tests` 的那个目录。下面所有命令都必须在这里执行；在 `C:\Windows\System32` 等目录执行会把当前目录误当成项目。
-
-### 1. 创建虚拟环境并安装
-
-Windows PowerShell：
+## 安装
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
+cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第3次作业"
 python -m pip install -e ".[dev]"
 ```
 
-如果 PowerShell 不允许激活脚本，可以先在当前终端临时放开：
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-Windows cmd：
-
-```bat
-python -m venv .venv
-.venv\Scripts\activate.bat
-python -m pip install -U pip
-python -m pip install -e ".[dev]"
-```
-
-### 2. 配置 API Key
+配置 Key（`.env` 已被 `.gitignore` 忽略，不会提交）：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-然后编辑 `.env`，把 `CHATBOT_API_KEY` 换成自己的 DeepSeek Key：
-
 ```dotenv
 CHATBOT_API_KEY=sk-你的真实Key
 ```
 
-> `.env` 已被 `.gitignore` 忽略，不会被提交；`.env.example` 只放占位符，可以提交。
-
-### 3. 运行
+## 启动服务
 
 ```powershell
-python -m chatbot
+python -m uvicorn chatbot.app:app --reload --port 8000
 ```
 
-安装后也可以直接使用命令入口：
+- 浏览器打开 <http://127.0.0.1:8000/docs> 可以直接点 **Try it out** 调接口
+- 健康检查：<http://127.0.0.1:8000/health>
+
+## 接口说明
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/chat` | 一问一答，返回完整回复 |
+| POST | `/chat/stream` | 一问一答，逐块返回纯文本 |
+| GET | `/sessions` | 会话 ID 列表 |
+| GET | `/sessions/{session_id}/messages` | 某会话的消息记录 |
+| DELETE | `/sessions/{session_id}` | 清空该会话 |
+| POST | `/study/word` | 学习功能：单词讲解 |
+| GET | `/health` | 健康检查 |
+
+### 1. 普通对话
 
 ```powershell
-chatbot
+curl.exe -s -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d "{\"session_id\":\"u1\",\"message\":\"hello\"}"
 ```
 
-输入内容开始对话，输入 `exit` 或 `quit` 退出。
+```json
+{"session_id": "u1", "reply": "你好！有什么可以帮你？"}
+```
 
-### 4. 运行测试
+同一个 `session_id` 再问一句，模型能看到之前的对话：
 
 ```powershell
-python -m pytest -q
+curl.exe -s -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d "{\"session_id\":\"u1\",\"message\":\"what did I just say?\"}"
 ```
 
-测试不联网、不需要真实 API Key。
+### 2. 会话管理
 
-## 在 WSL/Ubuntu 中运行
+```powershell
+# 会话列表
+curl.exe -s http://127.0.0.1:8000/sessions
+# {"sessions": ["u1"]}
 
-如果使用 VS Code 的 WSL 插件，建议把项目复制到 Ubuntu 家目录（例如 `~/projects/chatbot`），不要在 `/mnt/c` 里直接开发，也不要把 Windows 的 `.venv` 复制过去（Windows 的 `Scripts` 目录在 Linux 下不可用）。
+# 某会话的消息记录（按对话顺序）
+curl.exe -s http://127.0.0.1:8000/sessions/u1/messages
+# {"session_id":"u1","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"..."}]}
 
-先确认你已经进入 WSL：提示符应该是 `txy@主机名:~$` 这样的 Linux 提示符，而不是 `PS C:\Windows\System32>`。`sudo`、`source`、`python3.12` 都是 Linux 命令，在 PowerShell 里不能直接执行。
-
-在 Ubuntu 终端中执行：
-
-```bash
-mkdir -p ~/projects/chatbot
-cp -a "/mnt/c/Users/<Windows用户名>/Desktop/智能AI应用作业/第2次作业/." ~/projects/chatbot/
-cd ~/projects/chatbot
-
-# 删除 Windows 生成的虚拟环境和缓存
-rm -rf .venv .pytest_cache
-find . -type d -name "__pycache__" -prune -exec rm -rf {} +
-
-python3 --version
-sudo apt update
-sudo apt install -y python3.12 python3.12-venv
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-python -m pip install -e ".[dev]"
-
-cp .env.example .env
-nano .env        # 填入 CHATBOT_API_KEY
-python -m pytest -q
-python -m chatbot
+# 清空会话
+curl.exe -s -X DELETE http://127.0.0.1:8000/sessions/u1
+# {"session_id":"u1","deleted":true}
 ```
 
-如果 `python3.12` 不存在，说明 Ubuntu 版本较旧（例如 22.04 默认是 3.10）；本作业要求 3.12，请先确认系统版本并安装 Python 3.12，不要直接用 3.10 建环境。
+查询不存在的会话返回 **404**。
 
-复制完成后，用 VS Code 打开 WSL 中的项目：
+### 3. 流式输出
 
-```bash
-cd ~/projects/chatbot
-code .
+```powershell
+curl.exe -N -X POST http://127.0.0.1:8000/chat/stream -H "Content-Type: application/json" -d "{\"session_id\":\"u1\",\"message\":\"tell me a joke\"}"
 ```
 
-VS Code 左下角应显示 `WSL: Ubuntu`，集成终端应是 Linux bash，而不是 PowerShell。
+`-N` 关闭缓冲，可以看到文字一段段出现；流结束后完整回复会被写进该会话历史。
+
+### 4. 学习功能：单词讲解
+
+```powershell
+curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: application/json" -d "{\"word\":\"apple\"}"
+```
+
+```json
+{"word": "apple", "explanation": "n. 苹果。例句：I ate an apple.（我吃了一个苹果。）"}
+```
 
 ## 配置项
 
-所有可变参数都集中在 `src/chatbot/config.py` 的 `Settings` 中，运行时可被 `.env` 或同名环境变量覆盖。
+全部写在 `src/chatbot/config.py` 的 `Settings` 里，可被同名环境变量或 `.env` 覆盖。
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `CHATBOT_API_KEY` | 无（必填） | DeepSeek API Key |
-| `CHATBOT_BASE_URL` | `https://api.deepseek.com` | DeepSeek 的 OpenAI 兼容接口地址 |
-| `CHATBOT_MODEL` | `deepseek-chat` | 模型名，也可改为 `deepseek-reasoner` |
-| `CHATBOT_TEMPERATURE` | `0.7` | 采样温度，范围 0–2；设为 5 会抛 `ValidationError` |
-| `CHATBOT_MAX_HISTORY` | `20` | 保留最近多少轮对话 |
+| `CHATBOT_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容接口地址 |
+| `CHATBOT_MODEL` | `deepseek-chat` | 模型名，也可用 `deepseek-reasoner` |
+| `CHATBOT_TEMPERATURE` | `0.7` | 采样温度，范围 0–2 |
+| `CHATBOT_MAX_HISTORY` | `20` | 命令行版保留的最近轮数 |
+
+## 测试
+
+```powershell
+python -m pytest -q
+```
+
+13 个用例全部离线：用 `TestClient` + 假模型客户端，不联网、不需要真实 Key。
+
+| 文件 | 覆盖内容 |
+|---|---|
+| `tests/test_api_chat.py` | 连续对话带上历史、会话不串、学习功能可调用、空消息被拒绝、响应不含 Key |
+| `tests/test_api_sessions.py` | 会话列表、消息记录、清空后 404、不存在的会话 404 |
+| `tests/test_api_stream.py` | 模型收到 `stream=True`、流式内容正确、流式回复写入历史 |
+| `tests/test_config.py` | 配置默认值、温度越界、Key 不明文 |
+| `tests/test_llm.py` | 传给模型的参数 |
 
 ## 项目结构
 
 ```text
 .
 ├── pyproject.toml
-├── README.md
-├── .gitignore
 ├── .env.example
-├── src/
-│   └── chatbot/
-│       ├── __init__.py
-│       ├── __main__.py      # python -m chatbot 入口
-│       ├── config.py        # Settings / get_settings
-│       ├── llm.py           # DeepSeek client / stream_chat
-│       ├── chat.py          # ChatSession / 历史裁剪
-│       └── main.py          # CLI 入口
-├── tests/
-│   ├── test_config.py
-│   └── test_llm.py
-└── docs/
-    └── PR_GUIDE.md
+├── src/chatbot/
+│   ├── app.py        # FastAPI 应用与路由
+│   ├── store.py      # 内存会话仓库（唯一读写会话的地方）
+│   ├── study.py      # 学习功能：单词讲解提示词
+│   ├── llm.py        # DeepSeek 调用（流式 + 一次性）
+│   ├── config.py     # Settings / get_settings
+│   ├── chat.py       # 命令行版遗留的 ChatSession
+│   ├── main.py       # 命令行入口
+│   └── __main__.py   # python -m chatbot
+└── tests/
+    ├── conftest.py
+    ├── test_api_chat.py
+    ├── test_api_sessions.py
+    ├── test_api_stream.py
+    ├── test_config.py
+    └── test_llm.py
 ```
 
-## 实现说明
+## 命令行版仍可用
 
-### 配置
+改造没有删掉原来的 CLI，调试时还能直接用：
 
-`Settings` 使用 `CHATBOT_` 前缀，因此 `CHATBOT_API_KEY` 会自动映射到 `api_key` 字段。`get_settings()` 带 `lru_cache`，测试中通过 `get_settings.cache_clear()` 隔离配置。
-
-`get_settings()` 本身不捕获 `ValidationError`，这样测试可以断言：
-
-```python
-with pytest.raises(ValidationError):
-    get_settings()
+```powershell
+python -m chatbot
 ```
 
-友好的“缺少 API Key”提示放在 `main.run()` 中，由 CLI 层负责。
-
-### 流式输出
-
-`stream_chat()` 逐块读取 DeepSeek 的 SSE 响应，只把 `delta.content` 交给 CLI。CLI 使用：
-
-```python
-print(delta, end="", flush=True)
-```
-
-因此不会每个片段都换行；整轮结束后只打印一个换行。
-
-### 历史裁剪
-
-`ChatSession.trim_history()` 始终保留第一条 system prompt，只裁剪较早的对话，避免长对话无限增长，也避免出现“只有 assistant 没有对应 user”的孤立消息。
-
-### 测试如何做到离线
-
-`tests/test_llm.py` 不创建真实 `OpenAI` 客户端，而是注入一个假的 client，直接断言传给模型的参数：
-
-- `model` 与配置一致
-- `temperature` 与配置一致
-- `messages` 是包含 `role`/`content` 的字典列表
-- `stream` 必须为 `True`
+输入 `exit` 或 `quit` 退出。
 
 ## 安全注意
 
-- 不要把 `.env` 提交到 Git；提交前执行 `git status` 检查。
-- 不要在日志、截图或 PR 描述中粘贴真实 API Key。
-- `SecretStr` 只能防止“直接打印配置”时泄露，不能防止在代码中显式调用 `get_secret_value()`，因此只应在构造 API 客户端时读取明文 Key。
+- `.env` 不要提交，提交前用 `git status` 检查
+- API 响应里只有 `session_id`、`reply`、`role`、`content`，不含 Key
+- 会话数据在内存里，重启服务即清空（后续可换 Redis / 数据库）
+- `store.py` 是唯一读写会话的模块，换存储只改这一处
 
 ## 常见问题
 
+**`ModuleNotFoundError: No module named 'fastapi'`**
+
+没装依赖，在项目根目录执行 `python -m pip install -e ".[dev]"`。
+
 **`ModuleNotFoundError: No module named 'chatbot'`**
 
-先确认在项目根目录执行了：
+不在项目根目录，先 `cd` 到本目录。
 
-```powershell
-python -m pip install -e ".[dev]"
-```
+**`[Errno 10048] address already in use`**
 
-**`pip install -e .` 报 `C:\Windows\System32 does not appear to be a Python project`**
+8000 端口被占用，换一个：`--port 8001`。
 
-说明你不在项目根目录。先退出当前虚拟环境，再进入项目目录：
+**请求返回 502**
 
-```powershell
-deactivate
-cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第2次作业"
-Get-ChildItem pyproject.toml
-```
+模型调用失败（Key 错、余额不足、网络不通）。服务端只返回异常类型，不会泄露 Key。
 
-看到 `pyproject.toml` 后，重新创建并激活项目自己的 `.venv`。**不要**在 `C:\Windows\System32` 里继续执行 `pip install -e .`。
+**中文乱码**
 
-**`pytest` 扫描到 `C:\Windows\System32\LogFiles` 并报 PermissionError**
-
-原因同样是没有进入项目目录：`pytest` 把整个 `System32` 当成测试目录了。用 `cd` 进入项目根目录，并改用当前虚拟环境的解释器执行：
-
-```powershell
-python -m pytest -q
-```
-
-确认虚拟环境已激活，且当前目录是项目根目录；不要直接运行单个测试文件而不安装项目。
-
-**缺少 API Key**
-
-复制 `.env.example` 为 `.env`，填入 `CHATBOT_API_KEY`。程序会提示缺少配置并以非零状态退出，不会打印一大段 traceback。
-
-**WSL 里 pip 报 `files.pythonhosted.org ... Network is unreachable`**
-
-这是 WSL 访问 PyPI 文件服务器失败，不是代码问题。使用国内镜像重试：
-
-```bash
-cd ~/projects/chatbot
-source .venv/bin/activate
-python -m pip install -e ".[dev]" \
-  -i https://pypi.tuna.tsinghua.edu.cn/simple \
-  --trusted-host pypi.tuna.tsinghua.edu.cn \
-  --timeout 120 --retries 5
-```
-
-如果清华镜像也慢，可以换阿里云：
-
-```bash
--i https://mirrors.aliyun.com/pypi/simple/
-```
-
-不要把 `openai` 的上限去掉；本作业固定使用 `openai>=1.40.0,<2.0.0`，避免 pip 在 3.x 上反复回溯。
+用 `/docs` 页面调试最稳；用 `curl.exe` 时确保终端是 UTF-8。
