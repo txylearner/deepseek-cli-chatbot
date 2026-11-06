@@ -23,7 +23,7 @@ DeepSeek 提供 OpenAI 兼容接口，所以客户端仍然用 `openai` 包 + �
 ## 安装
 
 ```powershell
-cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第3次作业"
+cd "目标文件夹"
 python -m pip install -e ".[dev]"
 ```
 
