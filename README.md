@@ -26,7 +26,7 @@
 ## 安装
 
 ~~~powershell
-cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第4次作业"
+cd "第4次作业"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
