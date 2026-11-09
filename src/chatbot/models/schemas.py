@@ -21,6 +21,17 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class SessionOverview(BaseModel):
+    id: str
+    title: str = ""
+    message_count: int = 0
+    updated_at: str
+
+
+class SessionOverviewResponse(BaseModel):
+    sessions: list[SessionOverview]
+
+
 class WordRequest(BaseModel):
     word: str = Field(description="要讲解的英语单词")
 

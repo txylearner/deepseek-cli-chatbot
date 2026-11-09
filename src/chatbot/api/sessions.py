@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from ..core.exceptions import SessionNotFoundError
+from ..models.schemas import SessionOverview, SessionOverviewResponse
 from ..repositories.session_repository import SessionRepository
 from .deps import get_repository
 
@@ -16,6 +17,19 @@ def list_sessions(
     repository: SessionRepository = Depends(get_repository),
 ) -> dict[str, list[str]]:
     return {"sessions": repository.list_ids()}
+
+
+@router.get(
+    "/sessions/overview",
+    response_model=SessionOverviewResponse,
+    summary="会话概览（消息数、最近更新时间）",
+)
+def sessions_overview(
+    repository: SessionRepository = Depends(get_repository),
+) -> SessionOverviewResponse:
+    return SessionOverviewResponse(
+        sessions=[SessionOverview(**item) for item in repository.overview()]
+    )
 
 
 @router.get("/sessions/{session_id}/messages", summary="某会话的消息记录")

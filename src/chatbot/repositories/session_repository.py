@@ -29,6 +29,8 @@ class SessionRepository(Protocol):
 
     def list_ids(self) -> list[str]: ...
 
+    def overview(self) -> list[dict[str, object]]: ...
+
     def messages(self, session_id: str) -> list[Message] | None: ...
 
     def add_message(self, session_id: str, role: str, content: str) -> None: ...
@@ -74,6 +76,38 @@ class SQLiteSessionRepository:
                 "SELECT id FROM sessions ORDER BY created_at, rowid"
             ).fetchall()
         return [row["id"] for row in rows]
+
+    def overview(self) -> list[dict[str, object]]:
+        """会话概览：消息条数 + 最近更新时间 + 首条用户消息，供侧边栏显示。
+
+        一条 SQL 完成聚合，避免前端对每个会话再请求一次消息列表。
+        """
+        with transaction(self._db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    s.id AS id,
+                    s.updated_at AS updated_at,
+                    (SELECT COUNT(*) FROM messages m
+                     WHERE m.session_id = s.id) AS message_count,
+                    COALESCE((
+                        SELECT content FROM messages m2
+                        WHERE m2.session_id = s.id AND m2.role = 'user'
+                        ORDER BY m2.id LIMIT 1
+                    ), '') AS title
+                FROM sessions s
+                ORDER BY s.updated_at DESC, s.rowid DESC
+                """
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "message_count": row["message_count"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
 
     def messages(self, session_id: str) -> list[Message] | None:
         with transaction(self._db_path) as connection:
