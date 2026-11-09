@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeepSeek 对话助手</title>
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<aside class="sidebar">
+    <button id="new-chat" class="new-chat">＋ 新对话</button>
+    <div class="sidebar-title">会话</div>
+    <div id="session-list" class="session-list"></div>
+    <div class="sidebar-footer"><span id="storage-state">会话已保存到 SQLite</span></div>
+  </aside>
+
+  <main class="main">
+    <header class="header">
+      <div class="brand">DeepSeek 对话助手 <span class="tag">FastAPI</span> <span class="tag">SQLite</span></div>
+      <div class="header-actions">
+        <a class="ghost" href="/docs" target="_blank" rel="noopener" title="接口文档">文档</a>
+        <button id="clear-chat" class="ghost" title="清空当前会话">清空</button>
+        <button id="theme-toggle" class="ghost" title="切换主题">☀️</button>
+      </div>
+    </header>
+
+    <section id="messages" class="messages"></section>
+
+    <footer class="composer">
+      <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+      <button id="send" class="send" title="发送">↑</button>
+    </footer>
+  </main>
+<script src="js/app.js" defer></script>
+</body>
+</html>
