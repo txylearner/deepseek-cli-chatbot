@@ -1,4 +1,8 @@
-"""Application settings loaded from environment variables and .env."""
+"""应用配置：唯一读取环境变量和 .env 的地方。
+
+所有可调参数都集中在 Settings 里，其他模块通过 get_settings() 取，
+测试时用 cache_clear() 重新读取。
+"""
 
 from __future__ import annotations
 
@@ -9,11 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration.
-
-    Every tunable value lives here. Values can be overridden by environment
-    variables with the CHATBOT_ prefix, or by a local .env file.
-    """
+    """运行时配置，可被 CHATBOT_ 前缀的环境变量或 .env 覆盖。"""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -31,11 +31,11 @@ class Settings(BaseSettings):
 
     @property
     def api_key_value(self) -> str:
-        """Return the plaintext key for the API client only, never for logging."""
+        """只在创建客户端时取出明文，绝不用于日志或响应。"""
         return self.api_key.get_secret_value()
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return one cached Settings instance; tests can call cache_clear()."""
+    """返回唯一的 Settings 实例；测试里调用 cache_clear() 重置。"""
     return Settings()

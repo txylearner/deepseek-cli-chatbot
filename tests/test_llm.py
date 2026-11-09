@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from chatbot.config import Settings
-from chatbot.llm import stream_chat
+from chatbot.core.config import Settings
+from chatbot.llm.deepseek import stream_chat
 
 
 class FakeCompletions:

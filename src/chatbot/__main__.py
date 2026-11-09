@@ -1,7 +1,5 @@
-"""Allow `python -m chatbot` to start the CLI."""
+"""支持 python -m chatbot 启动命令行版。"""
 
-from .main import main
+from .cli.main import main
 
-
-if __name__ == "__main__":
-    main()
+main()

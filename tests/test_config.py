@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from chatbot.config import get_settings
+from chatbot.core.config import get_settings
 
 ENV_NAMES = (
     "CHATBOT_API_KEY",
