@@ -1,91 +1,110 @@
-# 第 3 次作业：Git 与 PR 操作指南
+# 第 4 次作业：Git 与 PR 操作指南
 
 当前状态：两个功能分支已经在本地提交完毕，只差推送和开 PR。
 
-| 分支 | 提交内容 | 对应 issue |
+| 分支 | 提交数 | 内容 |
 |---|---|---|
-| `feat/fastapi-chat-sessions` | 会话存储、`POST /chat`、会话管理接口、依赖更新 | #5 |
-| `feat/fastapi-stream-study` | `/chat/stream`、单词讲解、3 组离线测试、README | #6 |
+| `feat/db-persistence` | 4 + 1 | 分层重构、SQLite 存储、数据库测试、README，另有 1 个同步 main 的合并提交 |
+| `feat/web-frontend` | 4 + 1 | 会话概览接口、前端源码与构建、前端测试、README，另有 1 个同步数据库分支的合并提交 |
+
+`main` 仍停在第 3 次作业合并后的状态，等两个 PR 合入。
+
+> 网络提示：本机目前解析不了 `github.com`（`git ls-remote` 会报
+> `Could not resolve host`）。推送前先开代理 / VPN，或者换一台网络正常的电脑。
+> 先在项目目录执行一次下面这条命令，能列出分支就说明网络通了：
+>
+> ~~~powershell
+> git ls-remote --heads https://github.com/txylearner/deepseek-cli-chatbot
+> ~~~
 
 ---
 
-## 0. 先在 GitHub 建 2 个 issue
+## 0. 先建 2 个 issue
 
 仓库 → **Issues** → **New issue**：
 
-1. 标题 `实现 FastAPI 对话接口与会话管理`
-2. 标题 `实现流式输出、学习功能与离线测试`
+1. 标题：`会话存储改为 SQLite 持久化`
+2. 标题：`前端源码分离与聊天页面升级`
 
-记下两个编号（大概率是 **#5**、**#6**）。
+记下两个编号（大概率是 **#11**、**#12**）。下面 PR 描述里的 `Closes #11` 要换成真实编号。
 
 ---
 
 ## 1. 推送分支 A 并开 PR
 
-```powershell
-cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第3次作业"
-git switch feat/fastapi-chat-sessions
-git push -u origin feat/fastapi-chat-sessions
-```
+~~~powershell
+cd "C:\Users\谭新宇\Desktop\智能AI应用作业\第4次作业"
+git switch feat/db-persistence
+git push -u origin feat/db-persistence
+~~~
 
-仓库首页会出现 **Compare & pull request**，点它，标题填：
+打开仓库首页，会出现 **Compare & pull request**，标题填：
 
-```text
-feat: FastAPI 对话接口与会话管理
-```
+~~~text
+feat: 会话存储改为 SQLite 持久化
+~~~
 
 描述：
 
-```markdown
+~~~markdown
 ## 改了什么
-- 新增内存会话存储模块 store.py，所有读写集中在这一处，方便以后换数据库
-- 新增 POST /chat，按 session_id 维护多轮历史
-- 新增 GET /sessions、GET /sessions/{id}/messages、DELETE /sessions/{id}
-- llm.py 增加 complete_chat，把流式片段拼成完整回复
-- 依赖补充 fastapi、uvicorn、httpx
+- 后端按 Controller / Service / Repository 分层，路由不再直接操作数据
+- 会话与消息改存 SQLite：新增 db/ 包，启动时自动建表
+- 消息表通过外键指向会话表，删除会话时级联删除消息
+- 数据库文件加入 .gitignore，测试使用 tmp_path 临时库
+- 新增 9 个数据库测试，覆盖建表、历史、隔离、清空、重启
 
 ## 怎么验证
-- python -m uvicorn chatbot.app:app --port 8000，用 /docs 逐个调用
-- 同 session_id 追问能接上历史；换 session_id 不串话
-- 查不存在的会话返回 404，空消息返回 400
+- python -m pytest -q（25 passed）
+- 启动服务发一条消息，Ctrl+C 重启后
+  GET /sessions/{id}/messages 仍能查到原记录
 
-Closes #5
-```
+Closes #11
+~~~
 
-→ **Create pull request** → 请同学在 **Files changed** 留一条 review → 你回复 →
-**Merge pull request**（选 **Create a merge commit**）。
+→ **Create pull request** → 在 **Files changed** 留一条 review（例如：确认
+`store` 是唯一写 SQL 的地方）→ 你回复 → **Merge pull request**（选
+**Create a merge commit**，不要 Squash）。
 
 ---
 
-## 2. 合并后推送分支 B
+## 2. 合并后同步分支 B
 
-```powershell
+~~~powershell
 git switch main
 git pull --ff-only
-git switch feat/fastapi-stream-study
-git push -u origin feat/fastapi-stream-study
-```
+git switch feat/web-frontend
+git merge main
+git push -u origin feat/web-frontend
+~~~
 
-同样开 PR：
+`git merge main` 把刚合入的数据库改动带到 B 分支，避免 PR 里出现重复提交。
 
-```text
-feat: 流式输出、学习功能与离线测试
-```
+同样开 PR，标题：
 
-```markdown
+~~~text
+feat: 前端源码分离与聊天页面升级
+~~~
+
+描述：
+
+~~~markdown
 ## 改了什么
-- 新增 POST /chat/stream，用 StreamingResponse 边收边发，结束后把完整回复写回历史
-- 新增 POST /study/word 学习功能（单词讲解）
-- 新增 3 组离线测试：对话、会话管理、流式输出，共 10 个用例
-- README 补充服务启动方法与全部接口示例
+- 前端源码移到 frontend/，浏览器只拿到构建后的单文件页面
+- 新增 scripts/build_frontend.py：内联 CSS/JS 并用 rjsmin 压缩
+- 新增 GET /sessions/overview，侧边栏显示首条提问、消息数、最近时间
+- 页脚与空状态提示数据已写入 SQLite
+- README 增加 mermaid ER 图、建表语句与前端构建说明
+- 测试补充前端托管与源码不暴露的断言（31 passed）
 
 ## 怎么验证
-- python -m pytest -q（13 个用例全部通过，不联网、不需要真实 Key）
-- curl -N 调用 /chat/stream，可以看到文字一段段出现
-- 流式结束后 GET /sessions/{id}/messages 能看到这条回复
+- python scripts/build_frontend.py 后刷新页面
+- 浏览器访问 / 能聊天；查看网页源代码只有压缩后的单文件
+- 直接访问 /css/app.css、/js/app.js 返回 404
+- python -m pytest -q（31 passed）
 
-Closes #6
-```
+Closes #12
+~~~
 
 review → 回复 → **Create a merge commit**。
 
@@ -93,26 +112,31 @@ review → 回复 → **Create a merge commit**。
 
 ## 3. 合并后收尾
 
-```powershell
+~~~powershell
 git switch main
 git pull --ff-only
-git log --graph --oneline --all --decorate
-```
+git log --graph --oneline --all --decorate -20
+~~~
 
-截图存档；确认：
+确认：
 
-- [ ] 两个 PR 都是「功能分支 → main」，都写了 `Closes #x`
+- [ ] 两个 PR 都是「功能分支 → main」，描述里写了 `Closes #x`
 - [ ] 两个 PR 都有 review 评论 + 你的回复
-- [ ] main 已开启分支保护（Settings → Branches → Require a pull request before merging）
-- [ ] `git log` 能看到两个 merge commit
-- [ ] 仓库里没有 `.env`、没有真实 Key
+- [ ] `git log --graph` 能看到两个 merge commit
+- [ ] 仓库里没有 `.env`、没有 `*.db`
+- [ ] 合并后的 main 能跑 `python -m pytest -q`（31 passed）
+- [ ] 浏览器打开 8000 端口能看到聊天页面
 
 ---
 
 ## 4. 常见错误
 
-- **`git add .`**：会把 `.env`、`chatbot_api.txt`、笔记一起提交。只 `git add` 具体文件。
-- **Squash merge**：`git log --graph` 看不到分支图形，作业要求的是合并提交。
-- **直接 push main**：分支保护会拦；如果没配保护，说明要去 Settings 打开。
-- **PR 只改 README**：属于凑数 PR，作业明确不允许。
-- **忘记 `Closes #x`**：issue 不会自动关联，老师会认为没关联 issue。
+- **直接 push main**：分支保护会拦；没配保护就在 Settings → Branches 打开
+  “Require a pull request before merging”。
+- **Squash merge**：`git log --graph` 看不到分支图形，作业要求是合并提交。
+- **PR 只改 README**：这次两个 PR 都有真实功能和测试，不要拆成“凑数 PR”。
+- **忘记重新构建前端**：改了 `frontend/` 一定要跑
+  `python scripts/build_frontend.py`，否则页面还是旧的。
+- **提交了 `.env` 或 `chat.db`**：`git status` 检查；已提交的话用
+  `git rm --cached .env` 移出跟踪。
+- **网络不通就反复重试**：先确认 `git ls-remote` 能解析域名，再推送。

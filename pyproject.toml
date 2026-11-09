@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "deepseek-chatbot"
-version = "0.2.0"
-description = "A DeepSeek-powered chatbot exposed as a FastAPI service, with multi-turn conversation and streaming output."
+version = "0.3.0"
+description = "A layered FastAPI chatbot with SQLite persistence, streaming output and a plain HTML frontend."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -19,10 +19,11 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "httpx>=0.27.0",
+    "rjsmin>=1.2.0",
 ]
 
 [project.scripts]
-chatbot = "chatbot.main:main"
+chatbot = "chatbot.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chatbot"]

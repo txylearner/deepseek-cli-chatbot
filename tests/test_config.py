@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from chatbot.config import get_settings
+from chatbot.core.config import get_settings
 
 ENV_NAMES = (
     "CHATBOT_API_KEY",
@@ -13,6 +13,7 @@ ENV_NAMES = (
     "CHATBOT_MODEL",
     "CHATBOT_TEMPERATURE",
     "CHATBOT_MAX_HISTORY",
+    "CHATBOT_DB_PATH",
 )
 
 
@@ -36,6 +37,7 @@ def test_defaults_and_secret_masking(monkeypatch):
     assert settings.base_url == "https://api.deepseek.com"
     assert settings.temperature == 0.7
     assert settings.max_history == 20
+    assert settings.db_path == "chat.db"
     assert "sk-test" not in str(settings)
     assert "sk-test" not in repr(settings)
     assert settings.api_key.get_secret_value() == "sk-test"

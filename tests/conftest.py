@@ -1,4 +1,4 @@
-"""测试共用工具：假模型客户端 + 干净的会话状态。
+"""测试共用工具：假模型客户端 + 干净的会话仓库。
 
 所有测试都通过这里拿到“假模型”，因此不联网、不需要真实 API Key。
 """
@@ -11,7 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from chatbot.app import app
-from chatbot.config import get_settings
+from chatbot.core.config import get_settings
+from chatbot.repositories.session_repository import SQLiteSessionRepository
 
 DEFAULT_CHUNKS = ("你好", "，我是助手。")
 
@@ -52,6 +53,7 @@ class FakeClient:
 def isolated_env(monkeypatch, tmp_path):
     """用假 Key + 临时目录，避免读到真实的 .env。"""
     monkeypatch.setenv("CHATBOT_API_KEY", "sk-test")
+    monkeypatch.setenv("CHATBOT_DB_PATH", str(tmp_path / "chat.db"))
     monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
     yield
@@ -64,11 +66,11 @@ def fake_client() -> FakeClient:
 
 
 @pytest.fixture
-def api(fake_client):
-    """带上假模型的 TestClient，每条用例前后都清空会话。"""
-    app.state.store.reset()
+def api(fake_client, tmp_path):
+    """带上假模型和独立仓库的 TestClient，每条用例互不影响。"""
+    app.state.repository = SQLiteSessionRepository(tmp_path / "chat.db")
     app.state.model_client = fake_client
     with TestClient(app) as client:
         yield client
     app.state.model_client = None
-    app.state.store.reset()
+    app.state.repository = None
