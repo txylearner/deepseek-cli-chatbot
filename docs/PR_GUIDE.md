@@ -4,8 +4,8 @@
 
 | 分支 | 提交数 | 内容 |
 |---|---|---|
-| `feat/db-persistence` | 4 | 分层重构、SQLite 存储、数据库测试、README |
-| `feat/web-frontend` | 4 | 会话概览接口、前端源码与构建、前端测试、README |
+| `feat/db-persistence` | 4 + 1 | 分层重构、SQLite 存储、数据库测试、README，另有 1 个同步 main 的合并提交 |
+| `feat/web-frontend` | 4 + 1 | 会话概览接口、前端源码与构建、前端测试、README，另有 1 个同步数据库分支的合并提交 |
 
 `main` 仍停在第 3 次作业合并后的状态，等两个 PR 合入。
 
