@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from chatbot.app import app
 from chatbot.core.config import get_settings
-from chatbot.repositories.session_repository import InMemorySessionRepository
+from chatbot.repositories.session_repository import SQLiteSessionRepository
 
 DEFAULT_CHUNKS = ("你好", "，我是助手。")
 
@@ -53,6 +53,7 @@ class FakeClient:
 def isolated_env(monkeypatch, tmp_path):
     """用假 Key + 临时目录，避免读到真实的 .env。"""
     monkeypatch.setenv("CHATBOT_API_KEY", "sk-test")
+    monkeypatch.setenv("CHATBOT_DB_PATH", str(tmp_path / "chat.db"))
     monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
     yield
@@ -65,9 +66,9 @@ def fake_client() -> FakeClient:
 
 
 @pytest.fixture
-def api(fake_client):
+def api(fake_client, tmp_path):
     """带上假模型和独立仓库的 TestClient，每条用例互不影响。"""
-    app.state.repository = InMemorySessionRepository()
+    app.state.repository = SQLiteSessionRepository(tmp_path / "chat.db")
     app.state.model_client = fake_client
     with TestClient(app) as client:
         yield client

@@ -19,8 +19,9 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api.router import router as api_router
+from .core.config import get_settings
 from .core.exceptions import ChatbotError
-from .repositories.session_repository import InMemorySessionRepository
+from .repositories.session_repository import SQLiteSessionRepository
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -29,7 +30,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """启动时准备好的仓库；测试里会提前注入临时仓库。"""
     if app.state.repository is None:
-        app.state.repository = InMemorySessionRepository()
+        app.state.repository = SQLiteSessionRepository(get_settings().db_path)
     yield
 
 

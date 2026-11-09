@@ -35,6 +35,12 @@ Thumbs.db
 # Logs
 *.log
 
+# SQLite 数据库（运行时自动生成，禁止提交）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # 课程材料与本地笔记（不提交）
 *.pdf
 操作步骤.md

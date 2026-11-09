@@ -7,14 +7,15 @@
 from __future__ import annotations
 
 from ..core.config import get_settings
-from ..repositories.session_repository import InMemorySessionRepository
+from ..repositories.session_repository import SQLiteSessionRepository
 from ..services.chat_service import ChatService
 
 SESSION_ID = "cli"
 
 
 def main() -> None:
-    service = ChatService(InMemorySessionRepository(), get_settings())
+    settings = get_settings()
+    service = ChatService(SQLiteSessionRepository(settings.db_path), settings)
     print("DeepSeek 命令行聊天（输入 exit 退出）")
     while True:
         try:

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     api_key: SecretStr
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_history: int = Field(default=20, ge=1, le=100)
+    db_path: str = "chat.db"
 
     @property
     def api_key_value(self) -> str:
