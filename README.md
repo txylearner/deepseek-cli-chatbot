@@ -23,6 +23,9 @@
 - 会话与消息写入 SQLite，服务重启后历史仍在
 - 网页聊天界面：会话列表（消息数 + 最近时间）、历史消息、新建 / 切换 / 清空、
   逐字输出、Markdown 渲染、深浅色主题
+- 中英文一键切换（`EN` / `中`），界面文案、空状态、提示与 toast 同步切换
+- 独立「背景颜色」面板：经典蓝 / 樱花粉 / 青绿色 / 樱花青绿渐变，和深浅色互不冲突
+- 侧边栏品牌、欢迎页、助手头像与 favicon 使用鲸鱼娘图标
 - 31 个离线测试
 
 ## 环境要求
@@ -71,7 +74,8 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 ├── frontend/                     # 前端源码（不直接对外托管）
 │   ├── index.html                # 页面结构
 │   ├── css/app.css               # 样式
-│   └── js/app.js                 # 交互逻辑
+│   ├── js/app.js                 # 交互逻辑
+│   └── assets/whale.png          # 鲸鱼娘图标（构建时转 base64 内联）
 ├── scripts/
 │   └── build_frontend.py         # 内联 + 压缩，生成 static/index.html
 ├── src/chatbot/
@@ -209,11 +213,12 @@ python scripts/build_frontend.py
 python scripts/build_frontend.py --check
 ~~~
 
-构建脚本做三件事：
+构建脚本做四件事：
 
 1. 把 `css/app.css` 和 `js/app.js` 内联进 `index.html`
-2. 用 `rjsmin` 压缩 JavaScript，去掉注释与空白
-3. 输出到 `src/chatbot/static/index.html`，由 FastAPI 托管
+2. 把 `assets/whale.png` 转成 base64，用于 CSS 变量和 favicon
+3. 用 `rjsmin` 压缩 JavaScript，去掉注释与空白
+4. 输出到 `src/chatbot/static/index.html`，由 FastAPI 托管
 
 浏览器最终收到的是压缩后的单文件，看不到 `frontend/` 的目录结构；
 `/css/app.css`、`/js/app.js` 这些源路径访问会得到 404。
@@ -284,7 +289,9 @@ curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: applicati
 - 左侧会话列表：显示首条提问、消息数、最近更新时间；点击切换，悬停 **×** 删除
 - 中间对话区：用户消息靠右，助手回复靠左逐字流出（走 `POST /chat/stream`）
 - 底部输入框：**Enter 发送**、**Shift+Enter 换行**，生成中按钮变成 ■ 可停止
-- 右上角 **文档** 打开接口文档，**清空** 删除当前会话，**☀️/🌙** 切换主题
+- 右上角 **EN/中** 一键切换中英文；**背景** 打开背景颜色面板
+- 背景颜色：经典蓝 / 樱花粉 / 青绿色 / 樱花青绿渐变，与深色 / 浅色相互独立
+- 品牌标、欢迎页、助手头像与 favicon 使用鲸鱼娘图标
 - 助手回复支持 Markdown：标题、粗体、列表、行内代码、代码块、引用、链接
 
 ## 配置项

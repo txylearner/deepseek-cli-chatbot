@@ -1,36 +1,111 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="dark" data-palette="default">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DeepSeek 对话助手</title>
+<link rel="icon" href="__WHALE_DATA_URI__" />
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-<aside class="sidebar">
-    <button id="new-chat" class="new-chat">＋ 新对话</button>
-    <div class="sidebar-title">会话</div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark whale" aria-hidden="true"></div>
+      <div class="brand-text">
+        <div class="brand-name" data-i18n="brand.name">DeepSeek 对话助手</div>
+        <div class="brand-sub">FastAPI · SQLite</div>
+      </div>
+    </div>
+
+    <button id="new-chat" class="new-chat">
+      <span class="plus">+</span>
+      <span data-i18n="newChat">新对话</span>
+    </button>
+
+    <div class="section-head">
+      <span data-i18n="recent">最近会话</span>
+      <span id="session-count" class="count">0</span>
+    </div>
+
     <div id="session-list" class="session-list"></div>
-    <div class="sidebar-footer"><span id="storage-state">会话已保存到 SQLite</span></div>
+
+    <div class="sidebar-footer">
+      <div class="status">
+        <span class="dot"></span>
+        <span id="storage-state" data-i18n="status.saved">数据已保存到 SQLite</span>
+      </div>
+      <div class="version">v0.3.0 · deepseek-chat</div>
+    </div>
   </aside>
+
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
   <main class="main">
     <header class="header">
-      <div class="brand">DeepSeek 对话助手 <span class="tag">FastAPI</span> <span class="tag">SQLite</span></div>
+      <div class="header-left">
+        <button id="menu-toggle" class="icon-btn menu-toggle" data-i18n-title="menu.title" data-i18n-aria="menu.title" title="打开会话列表" aria-label="打开会话列表">☰</button>
+        <div class="header-title">
+          <span class="title" data-i18n="header.title">对话</span>
+          <span class="subtitle" data-i18n="header.subtitle">与 DeepSeek 实时对话</span>
+        </div>
+      </div>
       <div class="header-actions">
-        <a class="ghost" href="/docs" target="_blank" rel="noopener" title="接口文档">文档</a>
-        <button id="clear-chat" class="ghost" title="清空当前会话">清空</button>
-        <button id="theme-toggle" class="ghost" title="切换主题">☀️</button>
+        <a class="ghost" href="/docs" target="_blank" rel="noopener" data-i18n="docs">接口文档</a>
+        <button id="clear-chat" class="ghost" title="清空当前会话" data-i18n="clear" data-i18n-title="clear.title">清空</button>
+
+        <div class="palette-wrap">
+          <button id="palette-toggle" class="palette-btn" data-i18n-title="palette.title" data-i18n-aria="palette.title" title="背景颜色" aria-label="背景颜色">
+            <span class="palette-dot"></span>
+            <span class="palette-label" data-i18n="palette.short">背景</span>
+          </button>
+          <div id="palette-popover" class="palette-popover" hidden>
+            <div class="palette-title" data-i18n="palette.title">背景颜色</div>
+            <button type="button" class="palette-option" data-palette="default">
+              <span class="swatch swatch-default"></span>
+              <span data-i18n="palette.default">经典蓝</span>
+            </button>
+            <button type="button" class="palette-option" data-palette="sakura">
+              <span class="swatch swatch-sakura"></span>
+              <span data-i18n="palette.sakura">樱花粉</span>
+            </button>
+            <button type="button" class="palette-option" data-palette="teal">
+              <span class="swatch swatch-teal"></span>
+              <span data-i18n="palette.teal">青绿色</span>
+            </button>
+            <button type="button" class="palette-option" data-palette="sakura-teal">
+              <span class="swatch swatch-sakura-teal"></span>
+              <span data-i18n="palette.sakuraTeal">樱花青绿渐变</span>
+            </button>
+          </div>
+        </div>
+
+        <button id="lang-toggle" class="lang-btn" title="Switch to English" aria-label="Switch to English">EN</button>
+        <button id="theme-toggle" class="icon-btn" title="切换主题" aria-label="切换主题">☀</button>
       </div>
     </header>
 
-    <section id="messages" class="messages"></section>
+    <section id="messages" class="messages" aria-live="polite"></section>
 
-    <footer class="composer">
-      <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
-      <button id="send" class="send" title="发送">↑</button>
+    <button id="scroll-bottom" class="scroll-bottom" title="回到底部" data-i18n-title="scroll.bottom" hidden>↓</button>
+
+    <footer class="composer-wrap">
+      <div class="composer">
+        <textarea id="input" rows="1" data-i18n-placeholder="input.placeholder" placeholder="给 DeepSeek 发消息…"></textarea>
+        <div class="composer-bar">
+          <span class="hint" data-i18n="input.hint">Enter 发送 · Shift+Enter 换行</span>
+          <div class="composer-right">
+            <span id="char-count" class="char-count"></span>
+            <button id="send" class="send" title="发送" aria-label="发送">↑</button>
+          </div>
+        </div>
+      </div>
+      <div class="composer-note" data-i18n="input.note">对话内容会保存到 SQLite，刷新或重启服务后仍然在</div>
     </footer>
   </main>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
 <script src="js/app.js" defer></script>
 </body>
 </html>
