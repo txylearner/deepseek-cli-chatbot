@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import sys
 from pathlib import Path
@@ -27,6 +28,8 @@ OUTPUT = ROOT / "src" / "chatbot" / "static" / "index.html"
 
 STYLE_TAG = '<link rel="stylesheet" href="css/app.css" />'
 SCRIPT_TAG = '<script src="js/app.js" defer></script>'
+WHALE_ASSET = FRONTEND / "assets" / "whale.png"
+WHALE_TOKEN = "__WHALE_DATA_URI__"
 
 
 def minify_css(css: str) -> str:
@@ -46,13 +49,29 @@ def minify_html(html: str) -> str:
     return html.strip() + "\n"
 
 
+def whale_data_uri() -> str:
+    """把鲸鱼图标压成 base64 data URI，保证构建产物仍是单文件。"""
+    if not WHALE_ASSET.exists():
+        raise SystemExit(f"缺少图标资源：{WHALE_ASSET.relative_to(ROOT)}")
+    encoded = base64.b64encode(WHALE_ASSET.read_bytes()).decode("ascii")
+    return "data:image/png;base64," + encoded
+
+
 def render() -> str:
     html = (FRONTEND / "index.html").read_text(encoding="utf-8")
-    css = minify_css((FRONTEND / "css" / "app.css").read_text(encoding="utf-8"))
-    javascript = rjsmin.jsmin((FRONTEND / "js" / "app.js").read_text(encoding="utf-8"))
+    css = (FRONTEND / "css" / "app.css").read_text(encoding="utf-8")
+    javascript = (FRONTEND / "js" / "app.js").read_text(encoding="utf-8")
 
     if STYLE_TAG not in html or SCRIPT_TAG not in html:
         raise SystemExit("frontend/index.html 里找不到样式或脚本占位标签")
+    if WHALE_TOKEN not in html or WHALE_TOKEN not in css:
+        raise SystemExit("index.html 或 app.css 里找不到鲸鱼图标占位符")
+
+    whale = whale_data_uri()
+    html = html.replace(WHALE_TOKEN, whale)
+    css = css.replace(WHALE_TOKEN, whale)
+    css = minify_css(css)
+    javascript = rjsmin.jsmin(javascript)
 
     html = html.replace(STYLE_TAG, f"<style>{css}</style>")
     html = html.replace(SCRIPT_TAG, f"<script>{javascript}</script>")
