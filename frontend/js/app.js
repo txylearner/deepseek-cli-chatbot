@@ -15,6 +15,12 @@
       'docs': '接口文档',
       'clear': '清空',
       'clear.title': '清空当前会话',
+      'search.short': '搜索',
+      'search.title': '在历史中搜索',
+      'search.placeholder': '在历史消息中搜索关键词…',
+      'search.hint': '找到 {n} 条',
+      'search.empty': '没有匹配的消息',
+      'search.close': '退出搜索',
       'menu.title': '打开会话列表',
       'input.placeholder': '给 DeepSeek 发消息…',
       'input.hint': 'Enter 发送 · Shift+Enter 换行',
@@ -72,6 +78,12 @@
       'docs': 'API docs',
       'clear': 'Clear',
       'clear.title': 'Clear current chat',
+      'search.short': 'Search',
+      'search.title': 'Search this chat',
+      'search.placeholder': 'Search this chat\u2019s history\u2026',
+      'search.hint': '{n} matches',
+      'search.empty': 'No matching message',
+      'search.close': 'Exit search',
       'menu.title': 'Open chat list',
       'input.placeholder': 'Message DeepSeek…',
       'input.hint': 'Enter to send · Shift+Enter for newline',
@@ -125,6 +137,11 @@
     sessions: [],
     sending: false,
     controller: null,
+    history: [],
+    searching: false,
+    searchQuery: '',
+    searchResults: [],
+    searchTimer: null,
     theme: localStorage.getItem('chatbot-theme') || 'dark',
     lang: localStorage.getItem('chatbot-lang') || 'zh',
     palette: localStorage.getItem('chatbot-palette') || 'default',
@@ -152,7 +169,12 @@
     sessionCount: document.getElementById('session-count'),
     storageState: document.getElementById('storage-state'),
     paletteToggle: document.getElementById('palette-toggle'),
-    palettePopover: document.getElementById('palette-popover')
+    palettePopover: document.getElementById('palette-popover'),
+    searchToggle: document.getElementById('search-toggle'),
+    searchBar: document.getElementById('search-bar'),
+    searchInput: document.getElementById('search-input'),
+    searchHint: document.getElementById('search-hint'),
+    searchClose: document.getElementById('search-close')
   };
 
   var CODE_TICK = '\u0060';
@@ -330,6 +352,12 @@
     applyConnectionState();
     renderSidebar();
     refreshEmpty();
+
+    if (state.searching && state.searchQuery && els.searchHint) {
+      els.searchHint.textContent = state.searchResults.length
+        ? t('search.hint', { n: state.searchResults.length })
+        : t('search.empty');
+    }
   }
 
   if (els.theme) {
@@ -617,6 +645,16 @@
     scrollToBottom();
   }
 
+  function renderHistory(messages) {
+    clearMessages();
+    messages.forEach(function (message) {
+      var bubble = addMessage(message.role === 'user' ? 'user' : 'assistant');
+      if (message.role === 'user') bubble.textContent = message.content;
+      else bubble.innerHTML = renderMarkdown(message.content);
+    });
+    if (!messages.length) showEmpty();
+  }
+
   /* ---------- 会话 ---------- */
   function renderSidebar() {
     if (!els.list) return;
@@ -699,6 +737,8 @@
 
   function openSession(id) {
     state.sessionId = id;
+    clearSearchUi();
+    state.history = [];
     renderSidebar();
     clearMessages();
     closeSidebar();
@@ -711,19 +751,80 @@
         return response.status === 404 ? null : response.json();
       })
       .then(function (data) {
-        if (!data) { showEmpty(); return; }
-        var messages = data.messages || [];
-        messages.forEach(function (m) {
-          var bubble = addMessage(m.role === 'user' ? 'user' : 'assistant');
-          if (m.role === 'user') bubble.textContent = m.content;
-          else bubble.innerHTML = renderMarkdown(m.content);
-        });
-        if (!messages.length) showEmpty();
+        if (!data) { state.history = []; showEmpty(); return; }
+        state.history = data.messages || [];
+        renderHistory(state.history);
       })
       .catch(function () {
+        state.history = [];
         showEmpty();
         showToast(t('toast.loadFailed'), 'error');
       });
+  }
+
+  /* ---------- 历史搜索 ---------- */
+  function clearSearchUi() {
+    state.searching = false;
+    state.searchQuery = '';
+    state.searchResults = [];
+    clearTimeout(state.searchTimer);
+    state.searchTimer = null;
+    if (els.searchBar) els.searchBar.hidden = true;
+    if (els.searchInput) els.searchInput.value = '';
+    if (els.searchHint) els.searchHint.textContent = '';
+  }
+
+  function openSearch() {
+    if (!els.searchBar || state.sending) return;
+    state.searching = true;
+    els.searchBar.hidden = false;
+    els.searchInput.focus();
+  }
+
+  function exitSearch() {
+    clearSearchUi();
+    renderHistory(state.history);
+    scrollToBottom();
+  }
+
+  function renderSearchResult(messages, query) {
+    state.searchQuery = query;
+    state.searchResults = messages;
+    renderHistory(messages);
+    if (els.searchHint) {
+      els.searchHint.textContent = messages.length
+        ? t('search.hint', { n: messages.length })
+        : t('search.empty');
+    }
+  }
+
+  function runSearch() {
+    if (!state.searching || state.sending || !els.searchInput) return;
+    var query = els.searchInput.value.trim();
+    if (!query) {
+      state.searchQuery = '';
+      state.searchResults = [];
+      if (els.searchHint) els.searchHint.textContent = '';
+      renderHistory(state.history);
+      return;
+    }
+    var sessionId = state.sessionId;
+    fetch('/sessions/' + encodeURIComponent(sessionId) + '/messages?keyword=' + encodeURIComponent(query))
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (data) {
+        if (sessionId !== state.sessionId || !state.searching) return;
+        renderSearchResult(data ? (data.messages || []) : [], query);
+      })
+      .catch(function () {
+        showToast(t('toast.loadFailed'), 'error');
+      });
+  }
+
+  function scheduleSearch() {
+    clearTimeout(state.searchTimer);
+    state.searchTimer = setTimeout(runSearch, 220);
   }
 
   function removeSession(id) {
@@ -743,7 +844,9 @@
 
   function startNewChat() {
     if (state.controller) state.controller.abort();
+    clearSearchUi();
     state.sessionId = newSessionId();
+    state.history = [];
     clearMessages();
     showEmpty();
     renderSidebar();
@@ -780,6 +883,9 @@
     if (state.sending) { stopStreaming(); return; }
     var text = els.input.value.trim();
     if (!text) { els.input.focus(); return; }
+
+    // 发消息前先退出搜索：恢复完整历史，新的一轮会接在最后
+    if (state.searching) exitSearch();
 
     els.input.value = '';
     autoGrow();
@@ -830,7 +936,12 @@
       .finally(function () {
         state.controller = null;
         setSending(false);
-        if (acc) paint(aiBubble, acc, false);
+        if (acc) {
+          paint(aiBubble, acc, false);
+          // 服务端在流结束后把这一轮整体落库，本地历史保持同步
+          state.history.push({ role: 'user', content: text });
+          state.history.push({ role: 'assistant', content: acc });
+        }
         loadSessions();
         updateScrollButton();
       });
@@ -866,6 +977,28 @@
   if (els.clearChat) {
     els.clearChat.addEventListener('click', function () {
       removeSession(state.sessionId);
+    });
+  }
+
+  if (els.searchToggle) {
+    els.searchToggle.addEventListener('click', openSearch);
+  }
+
+  if (els.searchClose) {
+    els.searchClose.addEventListener('click', exitSearch);
+  }
+
+  if (els.searchInput) {
+    els.searchInput.addEventListener('input', scheduleSearch);
+    els.searchInput.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        exitSearch();
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        clearTimeout(state.searchTimer);
+        runSearch();
+      }
     });
   }
 
@@ -909,6 +1042,7 @@
     if (ev.key === 'Escape') {
       closeSidebar();
       closePalette();
+      if (state.searching) exitSearch();
     }
   });
 
