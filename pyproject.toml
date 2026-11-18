@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "deepseek-chatbot"
-version = "0.3.0"
+version = "0.4.0"
 description = "A layered FastAPI chatbot with SQLite persistence, streaming output and a plain HTML frontend."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
+    "SQLAlchemy>=2.0.0",
 ]
 
 [project.optional-dependencies]
