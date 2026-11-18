@@ -1,18 +1,19 @@
-# DeepSeek 对话机器人（FastAPI + SQLite）
+# DeepSeek 对话机器人（FastAPI + SQLite + SQLAlchemy ORM）
 
-第 2 次作业是命令行聊天机器人，第 3 次把它改造成 HTTP 服务，第 4 次继续改造：
-会话从内存搬进 SQLite，后端按分层架构拆分，前端源码与构建产物分离。
+第 2 次作业是命令行聊天机器人，第 3 次把它改造成 HTTP 服务，第 4 次把会话搬进 SQLite 并按分层架构拆分，
+第 5 次继续改造：用 SQLAlchemy 2.x ORM 接管数据库访问，一轮对话写进同一个事务，并支持按关键词查历史消息。
 
 ## 本次改造点
 
 | 作业要求 | 实现位置 |
 |---|---|
-| 会话存入 SQLite | `src/chatbot/db/schema.py`、`repositories/session_repository.py` |
-| README 用 mermaid 画 ER 图 | 本文“数据库”一节，与建表语句逐字对应 |
-| 纯 HTML 前端，8000 端口托管 | `frontend/` 源码 → 构建成 `src/chatbot/static/index.html` |
-| 数据库读写集中在存储模块 | `repositories/`，路由与 Service 里没有 SQL |
-| 自动建表、`*.db` 不提交 | 仓库初始化建表；`.gitignore` 忽略 `*.db` |
-| 离线测试 | `tests/` 共 31 个用例，假模型 + 临时数据库 |
+| 为“会话”“消息”定义 ORM 模型（主键、外键、relationship） | `db/models.py` |
+| 字段与已有 SQLite 表对应，启动不删表、不清库 | `db/schema.py`（`create_all(checkfirst=True)`） |
+| 存储模块改用 ORM 完成会话创建、列表、历史、清空、消息写入 | `repositories/session_repository.py` |
+| 每次数据库操作显式打开和关闭 Session | `db/engine.py` 的 `session_scope` |
+| 一轮对话的用户消息与助手回复写在同一事务 | `services/chat_service.py` + `append_turn()` |
+| 离线测试：旧数据可读、事务回滚、关键词查询 | `tests/` 共 42 个用例 |
+| README 说明模型与数据表的对应关系 | 本文「数据库」一节 |
 
 ## 功能
 
@@ -21,12 +22,13 @@
 - `GET /sessions`、`GET /sessions/overview`、`GET /sessions/{id}/messages`、`DELETE /sessions/{id}`
 - `POST /study/word` 学习功能：英语单词讲解
 - 会话与消息写入 SQLite，服务重启后历史仍在
+- 一问一答的提问与回复**在同一个事务里落库**：写失败时整轮回滚，不会留下半轮对话
 - 网页聊天界面：会话列表（消息数 + 最近时间）、历史消息、新建 / 切换 / 清空、
   逐字输出、Markdown 渲染、深浅色主题
 - 中英文一键切换（`EN` / `中`），界面文案、空状态、提示与 toast 同步切换
 - 独立「背景颜色」面板：经典蓝 / 樱花粉 / 青绿色 / 樱花青绿渐变，和深浅色互不冲突
 - 侧边栏品牌、欢迎页、助手头像与 favicon 使用鲸鱼娘图标
-- 31 个离线测试
+- 42 个离线测试
 
 ## 环境要求
 
@@ -36,7 +38,7 @@
 ## 安装
 
 ~~~powershell
-cd "第4次作业"
+cd "第5次作业"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -63,6 +65,7 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 - 健康检查：<http://127.0.0.1:8000/health>
 
 首次启动会在当前目录自动创建 `chat.db` 并建表，不需要手动执行任何 SQL。
+如果目录里已经有一个第 4 次作业留下的 `chat.db`，它会**原样继续用**，旧聊天记录照样能读。
 
 ## 项目结构
 
@@ -89,17 +92,19 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 │   │   ├── sessions.py           # /sessions 相关
 │   │   ├── study.py              # /study/word
 │   │   └── system.py             # /health
-│   ├── services/                 # 业务层：编排顺序与失败回滚
+│   ├── services/                 # 业务层：编排顺序与事务边界
 │   │   ├── chat_service.py
 │   │   └── study_service.py
 │   ├── repositories/             # 仓库层：唯一读写数据的地方
-│   │   └── session_repository.py
-│   ├── db/                       # 数据库层：连接与建表
-│   │   ├── connection.py
-│   │   └── schema.py
+│   │   └── session_repository.py # ORM 查询表达式 + 工作单元
+│   ├── db/                       # 数据库层
+│   │   ├── models.py             # ORM 模型：sessions / messages
+│   │   ├── engine.py             # 引擎、Session 工厂、PRAGMA、事务
+│   │   └── schema.py             # 建表入口（create_all）
 │   ├── models/                   # Pydantic 请求 / 响应模型
 │   │   └── schemas.py
-│   ├── core/                     # 配置、提示词、领域异常
+│   ├── core/                     # 配置、提示词、领域异常、时间格式
+│   │   ├── clock.py
 │   │   ├── config.py
 │   │   ├── prompts.py
 │   │   └── exceptions.py
@@ -111,6 +116,8 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 │       └── index.html            # 前端构建产物（浏览器实际拿到的页面）
 └── tests/
     ├── conftest.py               # 假模型 + 临时数据库
+    ├── test_orm_store.py         # 表结构 / 旧库兼容 / 重开连接 / 聚合 / 级联
+    ├── test_transaction.py       # 一轮两条消息 / 写失败回滚 / 模型失败
     ├── test_db.py                # 建表 / 历史 / 隔离 / 清空 / 重启
     ├── test_api_chat.py
     ├── test_api_sessions.py
@@ -126,23 +133,58 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 依赖方向只有一条：`api → services → repositories → db`。
 
 - **api**：解析请求、调用依赖、返回响应，不写业务顺序，也不写 SQL
-- **services**：校验输入、决定先存后调还是先调后存、失败时回滚
+- **services**：校验输入、决定什么时候调模型、什么时候开事务
 - **repositories**：唯一读写会话与消息的地方，接口由 `SessionRepository` 约定
-- **db**：连接参数（外键开关、超时）与建表语句
+- **db**：ORM 模型、连接参数（外键开关、超时）、Session 工厂与建表
 
 换数据库时，只需要新增一个实现 `SessionRepository` 的类，并在 `app.py` 里替换构造。
+
+### 事务边界：模型调用在事务之外
+
+一次普通对话的顺序是：
+
+~~~text
+读历史（只读事务） → 拼上本轮提问 → 调模型（不占事务） → 一个事务写两条消息
+~~~
+
+- `append_turn()` 把用户消息与助手回复放在同一个 Session 里，最后一次提交
+- 任何一步失败都会整体回滚，连会话记录都一起撤销，不会留下“只有提问没有回答”的半轮
+- 模型调用不放进事务：一次调用可能耗时数秒，而 SQLite 同一时刻只允许一个写事务，
+  长事务会让其他请求全部排队
+
+### 并发与性能
+
+- 路由全部是同步 `def`：FastAPI 会把它丢进线程池，阻塞的 SQLAlchemy 调用不会卡住事件循环。
+  如果把同步 Session 塞进 `async def`，并发会退化成串行
+- 每次操作开一个短 Session，数据库引擎按库文件缓存连接池，进程内复用
+- 连接上显式发 `BEGIN`：pysqlite 默认只在 DML 前开启事务，会让 `SAVEPOINT` 变成最外层事务、
+  `RELEASE` 时被提前提交，嵌套事务因此失效
+- 连接参数：`PRAGMA foreign_keys = ON`、`busy_timeout = 5000`，外键约束与锁等待都由数据库兜底
 
 ## 数据库
 
 - 文件：默认 `chat.db`，可用环境变量 `CHATBOT_DB_PATH` 改路径
-- 建表：`src/chatbot/db/schema.py` 里的 `CREATE TABLE IF NOT EXISTS`，
-  仓库初始化时执行，可重复运行
+- 建表：`db/schema.py` 里调用 `Base.metadata.create_all()`，仓库初始化时执行，可重复运行
 - 读写：全部集中在 `repositories/session_repository.py`，路由和 Service 里没有 SQL
 - 数据库文件已被 `.gitignore` 忽略，不会提交
 
+### 模型与数据表的对应关系
+
+| ORM 模型 | 数据表 | 字段（列名 : 类型） | 说明 |
+|---|---|---|---|
+| `ChatSession` | `sessions` | `id` TEXT 主键；`created_at`、`updated_at` TEXT | 一行一个会话；`messages` 关系指向它的消息 |
+| `ChatMessage` | `messages` | `id` INTEGER 主键自增；`session_id` TEXT 外键；`role`、`content`、`created_at` TEXT | `session` 关系指回会话；外键 `ON DELETE CASCADE` |
+
+- `ChatSession.messages` 与 `ChatMessage.session` 通过 `back_populates` 双向绑定，
+  拿到会话就能顺着关系取到它的消息，不用手写 join
+- `passive_deletes=True`：删除会话时不逐条加载消息，交给数据库的 `ON DELETE CASCADE`
+- 外键约束需要每条连接都打开（SQLite 默认关闭），这一步挂在 `db/engine.py` 的 connect 事件上
+- 字段类型使用 `Text` / `Integer`，新库生成的 DDL 与第 4 次作业逐列对应，
+  由 `tests/test_orm_store.py::test_orm_creates_the_same_table_layout` 守住
+
 ### ER 图
 
-下面这张图和 `db/schema.py` 的建表语句一一对应：
+下面这张图和 `db/models.py` 的模型声明一一对应：
 
 ~~~mermaid
 erDiagram
@@ -163,30 +205,22 @@ erDiagram
     }
 ~~~
 
-### 建表语句
-
-~~~sql
-CREATE TABLE IF NOT EXISTS sessions (
-    id         TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    role       TEXT    NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-    content    TEXT    NOT NULL,
-    created_at TEXT    NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
-CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
-~~~
-
 - 一个会话对应零到多条消息，消息通过 `session_id` 外键指向 `sessions.id`
 - 删除会话时，`ON DELETE CASCADE` 会把它的消息一起删掉
 - `idx_messages_session` 让“按会话取历史”走索引，而不是全表扫描
+
+### 升级到 ORM 时，旧数据怎么办
+
+第 4 次作业的 `chat.db` 不需要搬迁，也不需要写脚本：
+
+- 模型字段与旧表逐列对应，表结构没变，所以**没有表结构迁移**
+- 启动时用的是 `create_all(checkfirst=True)`：表已存在就一条 DDL 都不发，
+  既不删表也不清库，旧的 `sessions` / `messages` 原样保留
+- `tests/test_orm_store.py` 里有一条用例专门用第 4 次作业的 DDL 建库、灌数据、
+  再用 ORM 打开，断言旧记录可读且 `sqlite_master` 里的建表语句一个字节都没变
+
+如果以后确实要加列（例如给消息加 `token_count`），`create_all` 不会帮你改已有表，
+那时需要引入版本化迁移（Alembic，或手写 `schema_version` 表配升级/回滚脚本）。
 
 ### 验证“重启不丢数据”
 
@@ -313,11 +347,13 @@ curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: applicati
 python -m pytest -q
 ~~~
 
-31 个用例全部离线：假模型客户端 + `TestClient` + `tmp_path` 临时数据库，
+42 个用例全部离线：假模型客户端 + `TestClient` + `tmp_path` 临时数据库，
 不联网、不需要真实 Key，也不会碰开发者本地的 `.env` 和 `chat.db`。
 
 | 文件 | 覆盖内容 |
 |---|---|
+| `tests/test_orm_store.py` | ORM 生成的表结构与旧库一致、旧库数据可读且建表语句不变、重开连接历史仍在、会话隔离、概览聚合、级联删除 |
+| `tests/test_transaction.py` | 一轮对话恰好两条消息、写失败整轮回滚、API 返回 500 且不留数据、模型失败不落库 |
 | `tests/test_db.py` | 建表与外键、同一会话历史连续、会话隔离、清空后消息消失、重开数据库仍在、启动自动建库 |
 | `tests/test_api_chat.py` | 连续对话带上历史、会话不串、学习功能、空消息被拒、响应不含 Key |
 | `tests/test_api_sessions.py` | 会话列表、消息记录、清空后 404、不存在的会话 404 |
@@ -350,6 +386,10 @@ python -m chatbot
 
 没装依赖，在项目根目录执行 `python -m pip install -e ".[dev]"`。
 
+**`ModuleNotFoundError: No module named 'sqlalchemy'`**
+
+第 5 次作业新增了 ORM 依赖，重新执行一次 `python -m pip install -e ".[dev]"`。
+
 **`ModuleNotFoundError: No module named 'chatbot'`**
 
 不在项目根目录，先 `cd` 到本目录。
@@ -365,6 +405,11 @@ python -m chatbot
 **请求返回 502**
 
 模型调用失败（Key 错、余额不足、网络不通）。服务端只返回异常类型，不会泄露 Key。
+
+**请求返回 500**
+
+数据库写入失败：这一轮已经整体回滚，历史里不会留下半条消息，可以重试。
+确认磁盘可写、`chat.db` 没有被别的进程长期占用。
 
 **数据库被占用 / database is locked**
 
