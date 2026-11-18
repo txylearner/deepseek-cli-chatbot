@@ -1,8 +1,8 @@
-"""会话管理接口：列表、历史消息、清空。"""
+"""会话管理接口：列表、历史消息（可按关键词过滤）、清空。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from ..core.exceptions import SessionNotFoundError
 from ..models.schemas import SessionOverview, SessionOverviewResponse
@@ -32,12 +32,20 @@ def sessions_overview(
     )
 
 
-@router.get("/sessions/{session_id}/messages", summary="某会话的消息记录")
+@router.get(
+    "/sessions/{session_id}/messages",
+    summary="某会话的消息记录（可选按关键词过滤）",
+)
 def list_messages(
     session_id: str,
+    keyword: str | None = Query(
+        default=None,
+        max_length=100,
+        description="只返回内容包含该关键词的消息；不传则返回完整历史",
+    ),
     repository: SessionRepository = Depends(get_repository),
 ) -> dict[str, object]:
-    messages = repository.messages(session_id)
+    messages = repository.messages(session_id, keyword)
     if messages is None:
         raise SessionNotFoundError(f"会话不存在：{session_id}")
     return {"session_id": session_id, "messages": messages}

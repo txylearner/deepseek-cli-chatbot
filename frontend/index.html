@@ -52,6 +52,7 @@
       </div>
       <div class="header-actions">
         <a class="ghost" href="/docs" target="_blank" rel="noopener" data-i18n="docs">接口文档</a>
+        <button id="search-toggle" class="ghost" title="在历史中搜索" data-i18n="search.short" data-i18n-title="search.title">搜索</button>
         <button id="clear-chat" class="ghost" title="清空当前会话" data-i18n="clear" data-i18n-title="clear.title">清空</button>
 
         <div class="palette-wrap">
@@ -84,6 +85,12 @@
         <button id="theme-toggle" class="icon-btn" title="切换主题" aria-label="切换主题">☀</button>
       </div>
     </header>
+
+    <div id="search-bar" class="search-bar" hidden>
+      <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="在历史消息中搜索关键词…" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.placeholder" />
+      <span id="search-hint" class="search-hint"></span>
+      <button id="search-close" class="search-close" type="button" title="退出搜索" data-i18n-title="search.close" data-i18n-aria="search.close">×</button>
+    </div>
 
     <section id="messages" class="messages" aria-live="polite"></section>
 
