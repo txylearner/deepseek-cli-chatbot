@@ -32,3 +32,9 @@ class ModelCallError(ChatbotError):
     """上游模型调用失败。"""
 
     status_code = 502
+
+
+class StorageError(ChatbotError):
+    """数据库读写失败：一次事务已经整体回滚，调用方可以安全重试。"""
+
+    status_code = 500
