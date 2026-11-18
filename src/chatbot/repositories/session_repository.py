@@ -40,7 +40,9 @@ class SessionRepository(Protocol):
 
     def overview(self) -> list[dict[str, object]]: ...
 
-    def messages(self, session_id: str) -> list[Message] | None: ...
+    def messages(
+        self, session_id: str, keyword: str | None = None
+    ) -> list[Message] | None: ...
 
     def add_message(self, session_id: str, role: str, content: str) -> None: ...
 
@@ -143,7 +145,17 @@ class SQLiteSessionRepository:
             for row in rows
         ]
 
-    def messages(self, session_id: str) -> list[Message] | None:
+    def messages(
+        self, session_id: str, keyword: str | None = None
+    ) -> list[Message] | None:
+        """会话的历史消息；keyword 非空时只保留内容包含它的消息。
+
+        过滤用 ORM 表达式 ChatMessage.content.contains(keyword, autoescape=True)，
+        编译出来是 content LIKE '%' || ? || '%' ESCAPE '/'：
+        关键词里的 % 与 _ 会被转义成普通字符，不会当成通配符。
+        排序仍然按 id 升序，所以命中结果与完整历史的相对顺序一致。
+        """
+        keyword = (keyword or "").strip()
         with self._scope() as session:
             if session.get(ChatSession, session_id) is None:
                 return None
@@ -152,6 +164,10 @@ class SQLiteSessionRepository:
                 .where(ChatMessage.session_id == session_id)
                 .order_by(ChatMessage.id)
             )
+            if keyword:
+                stmt = stmt.where(
+                    ChatMessage.content.contains(keyword, autoescape=True)
+                )
             rows = session.execute(stmt).all()
         return [{"role": role, "content": content} for role, content in rows]
 
