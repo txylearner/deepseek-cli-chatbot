@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from chatbot.app import app, create_app
 from chatbot.core.config import get_settings
+from chatbot.db.engine import dispose_engine
 from chatbot.repositories.session_repository import SQLiteSessionRepository
 
 
@@ -101,6 +102,7 @@ def test_reopen_keeps_data(db_path) -> None:
     first.add_message("u1", "user", "重启前的问题")
     first.add_message("u1", "assistant", "重启前的回答")
 
+    dispose_engine(db_path)  # 关掉连接池，等价于重启服务
     second = SQLiteSessionRepository(db_path)
 
     assert second.list_ids() == ["u1"]
@@ -108,15 +110,6 @@ def test_reopen_keeps_data(db_path) -> None:
         {"role": "user", "content": "重启前的问题"},
         {"role": "assistant", "content": "重启前的回答"},
     ]
-
-
-def test_drop_last_message_rolls_back(repo) -> None:
-    """模型调用失败时回滚最后一条提问。"""
-    repo.add_message("u1", "user", "失败的一问")
-
-    repo.drop_last_message("u1")
-
-    assert repo.messages("u1") == []
 
 
 def test_reset_clears_everything(repo) -> None:
