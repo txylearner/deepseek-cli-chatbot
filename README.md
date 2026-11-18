@@ -12,14 +12,17 @@
 | 存储模块改用 ORM 完成会话创建、列表、历史、清空、消息写入 | `repositories/session_repository.py` |
 | 每次数据库操作显式打开和关闭 Session | `db/engine.py` 的 `session_scope` |
 | 一轮对话的用户消息与助手回复写在同一事务 | `services/chat_service.py` + `append_turn()` |
-| 离线测试：旧数据可读、事务回滚、关键词查询 | `tests/` 共 42 个用例 |
-| README 说明模型与数据表的对应关系 | 本文「数据库」一节 |
+| 历史消息按关键词查询（ORM 查询表达式） | `api/sessions.py`、`repositories/session_repository.py` |
+| 网页里能搜历史消息 | `frontend/js/app.js` + `search-bar` 样式 |
+| 离线测试：旧数据可读、事务回滚、关键词查询 | `tests/` 共 51 个用例 |
+| README 说明模型与数据表的对应关系，并给出 ORM 查询对应的 SQL | 本文「数据库」一节 |
 
 ## 功能
 
 - `POST /chat` 一问一答，按 `session_id` 维护多轮历史
 - `POST /chat/stream` 流式输出（`StreamingResponse` 逐块返回）
 - `GET /sessions`、`GET /sessions/overview`、`GET /sessions/{id}/messages`、`DELETE /sessions/{id}`
+- `GET /sessions/{id}/messages?keyword=` 按关键词查历史（只查当前会话，顺序与原历史一致）
 - `POST /study/word` 学习功能：英语单词讲解
 - 会话与消息写入 SQLite，服务重启后历史仍在
 - 一问一答的提问与回复**在同一个事务里落库**：写失败时整轮回滚，不会留下半轮对话
@@ -28,7 +31,7 @@
 - 中英文一键切换（`EN` / `中`），界面文案、空状态、提示与 toast 同步切换
 - 独立「背景颜色」面板：经典蓝 / 樱花粉 / 青绿色 / 樱花青绿渐变，和深浅色互不冲突
 - 侧边栏品牌、欢迎页、助手头像与 favicon 使用鲸鱼娘图标
-- 42 个离线测试
+- 51 个离线测试
 
 ## 环境要求
 
@@ -118,6 +121,7 @@ python -m uvicorn chatbot.app:app --reload --port 8000
     ├── conftest.py               # 假模型 + 临时数据库
     ├── test_orm_store.py         # 表结构 / 旧库兼容 / 重开连接 / 聚合 / 级联
     ├── test_transaction.py       # 一轮两条消息 / 写失败回滚 / 模型失败
+    ├── test_message_search.py    # 关键词查询：命中 / 顺序 / 隔离 / 通配符转义
     ├── test_db.py                # 建表 / 历史 / 隔离 / 清空 / 重启
     ├── test_api_chat.py
     ├── test_api_sessions.py
@@ -209,6 +213,52 @@ erDiagram
 - 删除会话时，`ON DELETE CASCADE` 会把它的消息一起删掉
 - `idx_messages_session` 让“按会话取历史”走索引，而不是全表扫描
 
+### 一条 ORM 查询与它的 SQL
+
+关键词查询（`GET /sessions/{id}/messages?keyword=索引`）在仓储里的写法：
+
+~~~python
+stmt = (
+    select(ChatMessage.role, ChatMessage.content)
+    .where(ChatMessage.session_id == session_id)
+    .order_by(ChatMessage.id)
+)
+if keyword:
+    stmt = stmt.where(ChatMessage.content.contains(keyword, autoescape=True))
+rows = session.execute(stmt).all()
+~~~
+
+它编译出来、真正发给 SQLite 的语句是：
+
+~~~sql
+SELECT messages.role, messages.content
+FROM messages
+WHERE messages.session_id = ?
+  AND (messages.content LIKE '%' || ? || '%' ESCAPE '/')
+ORDER BY messages.id;
+~~~
+
+手写 SQL 时，同样的语义会写成：
+
+~~~sql
+SELECT id, session_id, role, content, created_at
+FROM messages
+WHERE session_id = :session_id
+  AND content LIKE '%' || :keyword || '%' ESCAPE '/'
+ORDER BY id;
+~~~
+
+两种写法的关系：
+
+- ORM 表达式是**同一件事的另一种描述**：`select().where()` 只说“查哪张表、过滤什么、怎么排序”，
+  由 SQLAlchemy 在编译阶段翻译成参数化 SQL（`?` 占位符）再交给 SQLite；两者执行的是同一条语句
+- 关键词永远走占位符，不在 ORM 里拼字符串，所以带引号、分号也不会变成 SQL 语法
+- `contains(keyword, autoescape=True)` 会多生成 `ESCAPE '/'`，把关键词里的 `%` `_` 转义成普通字符；
+  否则搜 `100%` 会退化成通配符匹配，把所有消息都捞出来
+- 性能上两者完全一致：都走 `idx_messages_session` 的 `(session_id, id)` 前缀；
+  `LIKE '%关键词%'` 开头的 `%` 让它用不上 `content` 上的索引（本次也没有给 `content` 建索引，
+  真要做全文检索应该上 SQLite 的 FTS5，而不是继续加 B-tree 索引）
+
 ### 升级到 ORM 时，旧数据怎么办
 
 第 4 次作业的 `chat.db` 不需要搬迁，也不需要写脚本：
@@ -274,7 +324,7 @@ python scripts/build_frontend.py --check
 | POST | `/chat/stream` | 一问一答，逐块返回纯文本 |
 | GET | `/sessions` | 会话 ID 列表 |
 | GET | `/sessions/overview` | 会话概览：标题、消息数、最近更新时间 |
-| GET | `/sessions/{session_id}/messages` | 某会话的消息记录 |
+| GET | `/sessions/{session_id}/messages` | 某会话的消息记录，可加 `?keyword=` 按关键词过滤 |
 | DELETE | `/sessions/{session_id}` | 清空该会话 |
 | POST | `/study/word` | 学习功能：单词讲解 |
 | GET | `/health` | 健康检查 |
@@ -297,10 +347,14 @@ curl.exe -s -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/jso
 curl.exe -s http://127.0.0.1:8000/sessions
 curl.exe -s http://127.0.0.1:8000/sessions/overview
 curl.exe -s http://127.0.0.1:8000/sessions/u1/messages
+curl.exe -s http://127.0.0.1:8000/sessions/u1/messages?keyword=索引
 curl.exe -s -X DELETE http://127.0.0.1:8000/sessions/u1
 ~~~
 
 查询不存在的会话返回 **404**。
+
+`keyword` 不传或传空串时返回完整历史；传了就只返回当前会话里内容包含它的消息，
+顺序与完整历史一致。关键词最长 100 个字符，超了返回 **422**。
 
 ### 3. 流式输出
 
@@ -323,6 +377,8 @@ curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: applicati
 - 左侧会话列表：显示首条提问、消息数、最近更新时间；点击切换，悬停 **×** 删除
 - 中间对话区：用户消息靠右，助手回复靠左逐字流出（走 `POST /chat/stream`）
 - 底部输入框：**Enter 发送**、**Shift+Enter 换行**，生成中按钮变成 ■ 可停止
+- 右上角 **搜索** 打开历史搜索条：输入关键词后只显示当前会话的命中消息并给出条数，
+  **Esc** 或 **×** 退出搜索即恢复完整历史；发新消息前会自动退出搜索
 - 右上角 **EN/中** 一键切换中英文；**背景** 打开背景颜色面板
 - 背景颜色：经典蓝 / 樱花粉 / 青绿色 / 樱花青绿渐变，与深色 / 浅色相互独立
 - 品牌标、欢迎页、助手头像与 favicon 使用鲸鱼娘图标
@@ -347,13 +403,14 @@ curl.exe -s -X POST http://127.0.0.1:8000/study/word -H "Content-Type: applicati
 python -m pytest -q
 ~~~
 
-42 个用例全部离线：假模型客户端 + `TestClient` + `tmp_path` 临时数据库，
+51 个用例全部离线：假模型客户端 + `TestClient` + `tmp_path` 临时数据库，
 不联网、不需要真实 Key，也不会碰开发者本地的 `.env` 和 `chat.db`。
 
 | 文件 | 覆盖内容 |
 |---|---|
 | `tests/test_orm_store.py` | ORM 生成的表结构与旧库一致、旧库数据可读且建表语句不变、重开连接历史仍在、会话隔离、概览聚合、级联删除 |
 | `tests/test_transaction.py` | 一轮对话恰好两条消息、写失败整轮回滚、API 返回 500 且不留数据、模型失败不落库 |
+| `tests/test_message_search.py` | 不传关键词返回完整历史、命中过滤、顺序不变、跨会话隔离、`%` 不当通配符、空关键词、404、超长 422 |
 | `tests/test_db.py` | 建表与外键、同一会话历史连续、会话隔离、清空后消息消失、重开数据库仍在、启动自动建库 |
 | `tests/test_api_chat.py` | 连续对话带上历史、会话不串、学习功能、空消息被拒、响应不含 Key |
 | `tests/test_api_sessions.py` | 会话列表、消息记录、清空后 404、不存在的会话 404 |
