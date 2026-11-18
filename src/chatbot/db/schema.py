@@ -1,38 +1,24 @@
-"""数据库结构：表、外键与索引只在这里定义一次。
+"""建表入口：表结构由 ORM 模型声明，这里只负责“缺什么建什么”。
 
-README 里的 mermaid ER 图必须和这里的 DDL 保持一致。
+create_all(checkfirst=True) 只检查表是否存在：
+
+    表已存在 -> 一条 DDL 都不发，旧数据原样保留；
+    表不存在 -> 按 db/models.py 的声明建表。
+
+所以从第 4 次作业的裸 SQL 升级到 ORM，不会删表、不会清库。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from .connection import transaction
-
-DDL = """
-CREATE TABLE IF NOT EXISTS sessions (
-    id         TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    role       TEXT    NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-    content    TEXT    NOT NULL,
-    created_at TEXT    NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
-CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at);
-"""
+from .engine import get_engine
+from .models import Base
 
 
 def init_schema(db_path: str | Path) -> None:
-    """运行时自动建表；已存在时什么也不做，可重复执行。"""
-    path = Path(db_path)
-    if str(db_path) != ":memory:" and path.parent != Path(""):
-        path.parent.mkdir(parents=True, exist_ok=True)
-    with transaction(db_path) as connection:
-        connection.executescript(DDL)
+    """确保表存在；可重复执行，不会改动已有数据。"""
+    path = str(db_path)
+    if path != ":memory:":
+        Path(path).resolve().parent.mkdir(parents=True, exist_ok=True)
+    Base.metadata.create_all(get_engine(path))
