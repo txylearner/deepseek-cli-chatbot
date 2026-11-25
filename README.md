@@ -4,9 +4,10 @@
 第 6 次只做工程整理，把仓库拆成清晰的前后端两目录：
 
 - `backend/`：聊天机器人后端（FastAPI + SQLAlchemy + SQLite + 测试），以及原来的聊天页源码 `webui/` 与构建脚本
-- `frontend/`：用 `npm create vue@latest` 生成的**空 Vue 3 + Vite 工程**
+- `frontend/`：Vue 3 + Vite + Naive UI 的**聊天界面**，含会话栏、消息气泡、代码块、空状态与深浅主题
 
-> 本次前端只是脚手架，尚未接入 API：没有写 Vue 组件、没有调用 `/chat`、也没有前后端联调。
+> 前端目前用本地演示数据（`src/data/conversations.js`），还没有接 `/chat` 接口；
+> 界面与交互可以单独跑，接入位置见 [frontend/README.md](frontend/README.md)。
 
 ## 目录结构
 
@@ -19,10 +20,10 @@
 │   ├── tests/               # 51 个离线测试
 │   ├── pyproject.toml
 │   └── README.md            # 后端的详细说明
-├── frontend/                # Vue 3 + Vite 空工程
-│   ├── src/
-│   ├── index.html
-│   └── package.json
+├── frontend/                # Vue 3 + Vite + Naive UI 聊天界面
+│   ├── src/components/      # 侧边栏、消息列表、气泡、输入框、空状态
+│   ├── src/data/            # 本地演示数据（接后端前的占位）
+│   └── index.html
 ├── .gitignore
 └── README.md                # 本文件
 ~~~
@@ -67,8 +68,14 @@ npm install
 npm run dev
 ~~~
 
-浏览器打开 <http://localhost:5173/>，能看到 Vue 的默认欢迎页。
-本次只验证脚手架能跑起来，没有任何业务代码。
+浏览器打开 <http://localhost:5173/>，可以看到聊天界面：
+
+- 左侧会话栏：新建、搜索、切换、删除会话，底部切换深浅主题
+- 中间对话区：用户/助手气泡、代码块与复制、加载骨架屏、空状态
+- 底部输入区：Enter 发送、Shift+Enter 换行，生成中禁用
+
+界面用的是 Naive UI 组件 + Lucide 图标 + 自定义 CSS 变量，技术栈、目录与组件来源见
+[frontend/README.md](frontend/README.md)。数据目前是演示数据，刷新即恢复示例会话。
 
 ## 仓库卫生
 
