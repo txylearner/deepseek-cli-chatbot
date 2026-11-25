@@ -6,8 +6,8 @@
 - `backend/`：聊天机器人后端（FastAPI + SQLAlchemy + SQLite + 测试），以及原来的聊天页源码 `webui/` 与构建脚本
 - `frontend/`：Vue 3 + Vite + Naive UI 的**聊天界面**，含会话栏、消息气泡、代码块、空状态与深浅主题
 
-> 前端目前用本地演示数据（`src/data/conversations.js`），还没有接 `/chat` 接口；
-> 界面与交互可以单独跑，接入位置见 [frontend/README.md](frontend/README.md)。
+> 前端已通过 Vite 代理接上后端：**先启动 `backend/`（8000），再启动 `frontend/`（5173）**，
+> 会话列表、历史消息、流式对话、删除会话都是真实数据，接口说明见 [frontend/README.md](frontend/README.md)。
 
 ## 目录结构
 
@@ -21,8 +21,8 @@
 │   ├── pyproject.toml
 │   └── README.md            # 后端的详细说明
 ├── frontend/                # Vue 3 + Vite + Naive UI 聊天界面
+│   ├── src/api/client.js    # 调后端 /sessions、/chat/stream
 │   ├── src/components/      # 侧边栏、消息列表、气泡、输入框、空状态
-│   ├── src/data/            # 本地演示数据（接后端前的占位）
 │   └── index.html
 ├── .gitignore
 └── README.md                # 本文件
@@ -62,20 +62,24 @@ python -m pytest -q
 
 ## 前端：安装与启动
 
+**先确保后端在 8000 端口运行**（见上一节），再开一个终端：
+
 ~~~powershell
 cd frontend
 npm install
 npm run dev
 ~~~
 
-浏览器打开 <http://localhost:5173/>，可以看到聊天界面：
+浏览器打开 <http://localhost:5173/>，就是完整的聊天界面：
 
-- 左侧会话栏：新建、搜索、切换、删除会话，底部切换深浅主题
-- 中间对话区：用户/助手气泡、代码块与复制、加载骨架屏、空状态
-- 底部输入区：Enter 发送、Shift+Enter 换行，生成中禁用
+- 左侧会话栏：后端返回的真实会话，可新建、搜索、切换、删除，底部切换深浅主题
+- 中间对话区：用户/助手气泡、代码块与复制、流式输出、加载骨架屏、空状态
+- 底部输入区：Enter 发送、Shift+Enter 换行，生成中按钮变成「停止」
+- 顶部：会话标题、`deepseek-chat` 标签、消息数、删除会话（带确认）
 
-界面用的是 Naive UI 组件 + Lucide 图标 + 自定义 CSS 变量，技术栈、目录与组件来源见
-[frontend/README.md](frontend/README.md)。数据目前是演示数据，刷新即恢复示例会话。
+开发服务器通过 `vite.config.js` 的代理把 `/chat`、`/sessions`、`/health` 转发到 `127.0.0.1:8000`，
+所以页面里没有跨域问题；消息写进后端 SQLite，刷新或重启服务后仍然在。
+技术栈、目录与接口对照见 [frontend/README.md](frontend/README.md)。
 
 ## 仓库卫生
 
