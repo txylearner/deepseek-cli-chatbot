@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { NInput, NScrollbar } from 'naive-ui'
 import { MessageSquare, Moon, Plus, Search, Sun, Trash2, X } from 'lucide-vue-next'
+import { formatRelative } from '../utils/format'
 
 const props = defineProps({
   conversations: { type: Array, default: () => [] },
@@ -9,6 +10,7 @@ const props = defineProps({
   search: { type: String, default: '' },
   theme: { type: String, default: 'dark' },
   open: { type: Boolean, default: false },
+  online: { type: Boolean, default: true },
 })
 const emit = defineEmits(['select', 'new', 'remove', 'update:search', 'toggle-theme', 'close'])
 
@@ -60,8 +62,8 @@ const isDark = computed(() => props.theme === 'dark')
           <span class="conversation-main">
             <span class="conversation-title">{{ item.title }}</span>
             <span class="conversation-meta">
-              {{ item.messages.length ? item.messages.length + ' 条消息' : '暂无消息' }}
-              <template v-if="item.updatedAt"> · {{ item.updatedAt }}</template>
+              {{ item.messageCount ? item.messageCount + ' 条消息' : '暂无消息' }}
+              <template v-if="item.updatedAt"> · {{ formatRelative(item.updatedAt) }}</template>
             </span>
           </span>
           <span class="delete-btn" title="删除会话" @click.stop="$emit('remove', item.id)">
@@ -74,8 +76,8 @@ const isDark = computed(() => props.theme === 'dark')
     </n-scrollbar>
 
     <footer class="sidebar-footer">
-      <span class="status-dot" />
-      <span class="status-text">示例数据 · 未接后端</span>
+      <span class="status-dot" :class="{ offline: !online }" />
+      <span class="status-text">{{ online ? '已连接 127.0.0.1:8000' : '后端未连接' }}</span>
       <button class="icon-btn" :aria-label="isDark ? '切换到浅色' : '切换到深色'" @click="$emit('toggle-theme')">
         <Sun v-if="isDark" :size="16" />
         <Moon v-else :size="16" />
@@ -259,6 +261,11 @@ const isDark = computed(() => props.theme === 'dark')
   border-radius: 50%;
   background: #3ddc97;
   box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.16);
+}
+
+.status-dot.offline {
+  background: #f0616d;
+  box-shadow: 0 0 0 3px rgba(240, 97, 109, 0.18);
 }
 
 .status-text {

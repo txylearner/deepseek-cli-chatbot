@@ -1,5 +1,5 @@
 <script setup>
-import { NTag, NTooltip } from 'naive-ui'
+import { NPopconfirm, NTag } from 'naive-ui'
 import { Menu, Sparkles, Trash2 } from 'lucide-vue-next'
 
 defineProps({
@@ -29,14 +29,14 @@ defineEmits(['menu', 'clear'])
     <span v-if="count" class="count">{{ count }} 条消息</span>
 
     <div class="actions">
-      <n-tooltip trigger="hover" placement="bottom">
+      <n-popconfirm @positive-click="$emit('clear')">
         <template #trigger>
-          <button class="icon-btn" aria-label="清空当前对话" @click="$emit('clear')">
+          <button class="icon-btn" aria-label="删除当前会话">
             <Trash2 :size="16" />
           </button>
         </template>
-        清空当前对话
-      </n-tooltip>
+        删除当前会话？聊天记录会一起删除
+      </n-popconfirm>
     </div>
   </header>
 </template>

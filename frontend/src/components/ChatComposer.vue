@@ -1,20 +1,20 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { NInput } from 'naive-ui'
-import { Send } from 'lucide-vue-next'
+import { Send, Square } from 'lucide-vue-next'
 
 const props = defineProps({
-  disabled: { type: Boolean, default: false },
+  sending: { type: Boolean, default: false },
 })
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'stop'])
 
 const value = ref('')
 const inputRef = ref(null)
-const canSend = computed(() => value.value.trim().length > 0 && !props.disabled)
+const canSend = computed(() => value.value.trim().length > 0 && !props.sending)
 
 function submit() {
   const text = value.value.trim()
-  if (!text || props.disabled) return
+  if (!text || props.sending) return
   emit('send', text)
   value.value = ''
 }
@@ -36,7 +36,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="composer" :class="{ disabled }" @keydown="onKeydown">
+  <div class="composer" :class="{ muted: sending }" @keydown="onKeydown">
     <n-input
       ref="inputRef"
       v-model:value="value"
@@ -44,7 +44,6 @@ defineExpose({
       :bordered="false"
       :autosize="{ minRows: 1, maxRows: 6 }"
       placeholder="给 DeepSeek 发消息…"
-      :disabled="disabled"
     />
 
     <div class="bar">
@@ -53,7 +52,16 @@ defineExpose({
       </span>
       <div class="right">
         <span v-if="value.length" class="count">{{ value.length }}</span>
-        <button class="send" :disabled="!canSend" aria-label="发送" @click="submit">
+        <button
+          v-if="sending"
+          class="send stop"
+          aria-label="停止生成"
+          title="停止生成"
+          @click="$emit('stop')"
+        >
+          <Square :size="14" />
+        </button>
+        <button v-else class="send" :disabled="!canSend" aria-label="发送" @click="submit">
           <Send :size="17" />
         </button>
       </div>
@@ -76,10 +84,6 @@ defineExpose({
 .composer:focus-within {
   border-color: rgba(124, 92, 255, 0.55);
   box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.12), var(--shadow);
-}
-
-.composer.disabled {
-  opacity: 0.7;
 }
 
 .bar {
@@ -127,6 +131,13 @@ defineExpose({
 .send:disabled {
   cursor: not-allowed;
   opacity: 0.42;
+  box-shadow: none;
+}
+
+.send.stop {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   box-shadow: none;
 }
 

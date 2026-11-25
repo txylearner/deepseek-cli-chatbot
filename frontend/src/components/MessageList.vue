@@ -7,7 +7,6 @@ import EmptyState from './EmptyState.vue'
 const props = defineProps({
   messages: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  sending: { type: Boolean, default: false },
 })
 defineEmits(['pick'])
 
@@ -43,9 +42,6 @@ watch(
 
       <template v-else>
         <MessageBubble v-for="(item, index) in messages" :key="index" :message="item" />
-        <div v-if="sending" class="typing">
-          <span /><span /><span />
-        </div>
       </template>
     </div>
   </div>
@@ -72,41 +68,6 @@ watch(
 
 .skeleton-row.right {
   flex-direction: row-reverse;
-}
-
-.typing {
-  display: flex;
-  gap: 5px;
-  width: min(860px, 100%);
-  margin: 0 auto 22px;
-  padding-left: 46px;
-}
-
-.typing span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-3);
-  animation: blink 1.2s infinite ease-in-out;
-}
-
-.typing span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.typing span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes blink {
-  0%, 80%, 100% {
-    opacity: 0.25;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
 }
 
 @media (max-width: 640px) {
