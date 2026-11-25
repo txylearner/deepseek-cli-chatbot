@@ -26,8 +26,12 @@ htmlcov/
 .env.*
 !.env.example
 
+# Node / 前端
+node_modules/
+dist/
+
 # IDE / OS
-.vscode/
+/.vscode/
 .idea/
 .DS_Store
 Thumbs.db
