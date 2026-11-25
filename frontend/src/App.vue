@@ -1,47 +1,40 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
+import { computed, ref, watch } from 'vue'
+import { darkTheme, NConfigProvider, NMessageProvider } from 'naive-ui'
+import Workspace from './components/Workspace.vue'
+import { createThemeOverrides } from './theme'
+
+const STORAGE_KEY = 'chat-ui-theme'
+const requested = new URLSearchParams(location.search).get('theme')
+const theme = ref(
+  requested === 'light' || requested === 'dark'
+    ? requested
+    : localStorage.getItem(STORAGE_KEY) === 'light'
+      ? 'light'
+      : 'dark',
+)
+
+watch(
+  theme,
+  (value) => {
+    localStorage.setItem(STORAGE_KEY, value)
+    document.documentElement.dataset.theme = value
+  },
+  { immediate: true },
+)
+
+const isDark = computed(() => theme.value === 'dark')
+const themeOverrides = computed(() => createThemeOverrides(isDark.value))
+
+function toggleTheme() {
+  theme.value = isDark.value ? 'light' : 'dark'
+}
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
-
-  <main>
-    <TheWelcome />
-  </main>
+  <n-config-provider :theme="isDark ? darkTheme : null" :theme-overrides="themeOverrides">
+    <n-message-provider :max="2" placement="top-right">
+      <Workspace :theme="theme" @toggle-theme="toggleTheme" />
+    </n-message-provider>
+  </n-config-provider>
 </template>
-
-<style scoped>
-header {
-  line-height: 1.5;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-}
-</style>
