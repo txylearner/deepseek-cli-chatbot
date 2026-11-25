@@ -1,4 +1,4 @@
-"""把 frontend/ 下的源码内联并压缩成一个 index.html。
+"""把 webui/ 下的源码内联并压缩成一个 index.html。
 
 为什么需要构建：
     浏览器只能拿到 HTML / CSS / JS，源码必须下发。为了让随手查看
@@ -23,12 +23,12 @@ except ImportError:  # pragma: no cover - 构建环境提示
     raise SystemExit("缺少构建依赖，请先执行：python -m pip install rjsmin")
 
 ROOT = Path(__file__).resolve().parents[1]
-FRONTEND = ROOT / "frontend"
+WEBUI = ROOT / "webui"
 OUTPUT = ROOT / "src" / "chatbot" / "static" / "index.html"
 
 STYLE_TAG = '<link rel="stylesheet" href="css/app.css" />'
 SCRIPT_TAG = '<script src="js/app.js" defer></script>'
-WHALE_ASSET = FRONTEND / "assets" / "whale.png"
+WHALE_ASSET = WEBUI / "assets" / "whale.png"
 WHALE_TOKEN = "__WHALE_DATA_URI__"
 
 
@@ -58,12 +58,12 @@ def whale_data_uri() -> str:
 
 
 def render() -> str:
-    html = (FRONTEND / "index.html").read_text(encoding="utf-8")
-    css = (FRONTEND / "css" / "app.css").read_text(encoding="utf-8")
-    javascript = (FRONTEND / "js" / "app.js").read_text(encoding="utf-8")
+    html = (WEBUI / "index.html").read_text(encoding="utf-8")
+    css = (WEBUI / "css" / "app.css").read_text(encoding="utf-8")
+    javascript = (WEBUI / "js" / "app.js").read_text(encoding="utf-8")
 
     if STYLE_TAG not in html or SCRIPT_TAG not in html:
-        raise SystemExit("frontend/index.html 里找不到样式或脚本占位标签")
+        raise SystemExit("webui/index.html 里找不到样式或脚本占位标签")
     if WHALE_TOKEN not in html or WHALE_TOKEN not in css:
         raise SystemExit("index.html 或 app.css 里找不到鲸鱼图标占位符")
 

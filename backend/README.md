@@ -1,7 +1,11 @@
 # DeepSeek 对话机器人（FastAPI + SQLite + SQLAlchemy ORM）
 
 第 2 次作业是命令行聊天机器人，第 3 次把它改造成 HTTP 服务，第 4 次把会话搬进 SQLite 并按分层架构拆分，
-第 5 次继续改造：用 SQLAlchemy 2.x ORM 接管数据库访问，一轮对话写进同一个事务，并支持按关键词查历史消息。
+第 5 次用 SQLAlchemy 2.x ORM 接管数据库访问，一轮对话写进同一个事务，并支持按关键词查历史消息；
+第 6 次只做工程整理：后端整体搬进 `backend/`，仓库根另建一个空的 Vue 3 前端工程（见根目录 README）。
+
+> **本目录是后端项目**：`pytest`、`uvicorn`、`scripts/build_frontend.py` 等命令都必须在 `backend/` 目录下执行。
+> `.env`、`chat.db`、`src/chatbot/static/` 都是相对当前工作目录或包目录解析的。
 
 ## 本次改造点
 
@@ -13,7 +17,7 @@
 | 每次数据库操作显式打开和关闭 Session | `db/engine.py` 的 `session_scope` |
 | 一轮对话的用户消息与助手回复写在同一事务 | `services/chat_service.py` + `append_turn()` |
 | 历史消息按关键词查询（ORM 查询表达式） | `api/sessions.py`、`repositories/session_repository.py` |
-| 网页里能搜历史消息 | `frontend/js/app.js` + `search-bar` 样式 |
+| 网页里能搜历史消息 | `webui/js/app.js` + `search-bar` 样式 |
 | 离线测试：旧数据可读、事务回滚、关键词查询 | `tests/` 共 51 个用例 |
 | README 说明模型与数据表的对应关系，并给出 ORM 查询对应的 SQL | 本文「数据库」一节 |
 
@@ -41,7 +45,7 @@
 ## 安装
 
 ~~~powershell
-cd "第5次作业"
+cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -76,8 +80,7 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 .
 ├── pyproject.toml
 ├── .env.example
-├── .gitignore
-├── frontend/                     # 前端源码（不直接对外托管）
+├── webui/                        # 聊天页源码（不直接对外托管）
 │   ├── index.html                # 页面结构
 │   ├── css/app.css               # 样式
 │   ├── js/app.js                 # 交互逻辑
@@ -116,7 +119,7 @@ python -m uvicorn chatbot.app:app --reload --port 8000
 │   ├── cli/                      # 命令行版（与 Web 共用 Service / Repository）
 │   │   └── main.py
 │   └── static/
-│       └── index.html            # 前端构建产物（浏览器实际拿到的页面）
+│       └── index.html            # 聊天页构建产物（浏览器实际拿到的页面）
 └── tests/
     ├── conftest.py               # 假模型 + 临时数据库
     ├── test_orm_store.py         # 表结构 / 旧库兼容 / 重开连接 / 聚合 / 级联
@@ -285,12 +288,12 @@ python -m uvicorn chatbot.app:app --port 8000
 curl.exe -s http://127.0.0.1:8000/sessions/u1/messages
 ~~~
 
-## 前端：源码与构建产物分离
+## 聊天页：源码与构建产物分离
 
-`frontend/` 里是可以阅读、修改的源码；浏览器不会直接拿到它。
+`webui/` 里是可以阅读、修改的源码；浏览器不会直接拿到它。
 
 ~~~powershell
-# 改完 frontend/ 后重新构建
+# 改完 webui/ 后重新构建（在 backend/ 目录下执行）
 python scripts/build_frontend.py
 
 # 只检查产物是否最新（CI 用）
@@ -304,7 +307,7 @@ python scripts/build_frontend.py --check
 3. 用 `rjsmin` 压缩 JavaScript，去掉注释与空白
 4. 输出到 `src/chatbot/static/index.html`，由 FastAPI 托管
 
-浏览器最终收到的是压缩后的单文件，看不到 `frontend/` 的目录结构；
+浏览器最终收到的是压缩后的单文件，看不到 `webui/` 的目录结构；
 `/css/app.css`、`/js/app.js` 这些源路径访问会得到 404。
 
 需要说明的一点：**任何要在浏览器里运行的代码，最终都必须下发到客户端**，
@@ -441,21 +444,21 @@ python -m chatbot
 
 **`ModuleNotFoundError: No module named 'fastapi'`**
 
-没装依赖，在项目根目录执行 `python -m pip install -e ".[dev]"`。
+没装依赖，在 `backend/` 目录下执行 `python -m pip install -e ".[dev]"`。
 
 **`ModuleNotFoundError: No module named 'sqlalchemy'`**
 
-第 5 次作业新增了 ORM 依赖，重新执行一次 `python -m pip install -e ".[dev]"`。
+本项目新增了 ORM 依赖，在 `backend/` 下重新执行一次 `python -m pip install -e ".[dev]"`。
 
 **`ModuleNotFoundError: No module named 'chatbot'`**
 
-不在项目根目录，先 `cd` 到本目录。
+不在 `backend/` 目录下，先 `cd backend` 再执行。
 
 **`[Errno 10048] address already in use`**
 
 8000 端口被占用，换一个：`--port 8001`。
 
-**改了 frontend/ 但页面没变**
+**改了 webui/ 但页面没变**
 
 忘记构建了，执行 `python scripts/build_frontend.py` 后刷新浏览器。
 
