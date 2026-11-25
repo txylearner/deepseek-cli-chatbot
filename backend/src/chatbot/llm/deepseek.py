@@ -21,6 +21,16 @@ def build_client(settings: Settings) -> OpenAI:
     )
 
 
+def _safe_text(value: str) -> str:
+    """处理被拆开的代理对。
+
+    SSE 分片可能把一个 emoji 的 UTF-8/UTF-16 表示切断，JSON 里就会留下孤立代理字符
+    （U+DC80–U+DCFF 区间）。直接打印或编码成 UTF-8 会抛 UnicodeEncodeError，
+    所以这里把无法编码的部分替换掉，保证流式输出不会中断。
+    """
+    return value.encode("utf-8", errors="replace").decode("utf-8")
+
+
 def stream_chat(
     messages: list[dict[str, str]],
     settings: Settings,
@@ -40,7 +50,7 @@ def stream_chat(
             continue
         delta = chunk.choices[0].delta.content
         if delta:
-            yield delta
+            yield _safe_text(delta)
 
 
 def complete_chat(
