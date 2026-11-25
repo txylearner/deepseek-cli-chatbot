@@ -1,125 +1,220 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import AppSidebar from './AppSidebar.vue'
 import ChatHeader from './ChatHeader.vue'
 import ChatComposer from './ChatComposer.vue'
 import MessageList from './MessageList.vue'
-import { demoReplies, seedConversations } from '../data/conversations'
+import { deleteSession, fetchMessages, fetchOverview, streamChat } from '../api/client'
+import { nowClock } from '../utils/format'
 
 defineProps({ theme: { type: String, default: 'dark' } })
 defineEmits(['toggle-theme'])
 
 const message = useMessage()
 
-/** 深拷贝演示数据，避免直接改动模块级常量 */
-const conversations = ref(
-  seedConversations.map((item) => ({ ...item, messages: item.messages.map((m) => ({ ...m })) })),
-)
-const activeId = ref(conversations.value[0]?.id ?? '')
-const search = ref('')
+/** 服务端会话列表（来自 GET /sessions/overview） */
+const sessions = ref([])
+/** 本地的新会话：第一次发送后由后端创建同名 session */
+const draft = ref(null)
+const activeId = ref('')
+const messages = ref([])
+
 const loading = ref(false)
 const sending = ref(false)
+const online = ref(true)
+const search = ref('')
 const mobileOpen = ref(false)
-const composerRef = ref(null)
 
-const active = computed(() => conversations.value.find((item) => item.id === activeId.value) ?? null)
-const messages = computed(() => active.value?.messages ?? [])
+const composerRef = ref(null)
+const controller = ref(null)
+
+const items = computed(() => {
+  const list = sessions.value.map((item) => ({
+    id: item.id,
+    title: item.title || '新的对话',
+    messageCount: item.message_count,
+    updatedAt: item.updated_at,
+  }))
+  if (draft.value) {
+    list.unshift({
+      id: draft.value.id,
+      title: draft.value.title,
+      messageCount: messages.value.filter((item) => item.role === 'user').length,
+      updatedAt: draft.value.updatedAt,
+    })
+  }
+  return list
+})
 
 const filtered = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return conversations.value
-  return conversations.value.filter((item) =>
-    (item.title + item.preview).toLowerCase().includes(keyword),
-  )
+  if (!keyword) return items.value
+  return items.value.filter((item) => item.title.toLowerCase().includes(keyword))
 })
 
-let loadTimer = null
-let replyTimer = null
+const activeTitle = computed(
+  () => items.value.find((item) => item.id === activeId.value)?.title || '新的对话',
+)
 
-function select(id) {
-  mobileOpen.value = false
-  if (id === activeId.value) return
-  activeId.value = id
-  loading.value = true
-  clearTimeout(loadTimer)
-  loadTimer = setTimeout(() => {
-    loading.value = false
-  }, 260)
+const subtitle = computed(() => {
+  const first = messages.value.find((item) => item.role === 'user')
+  return first ? first.content.slice(0, 40) : '与 DeepSeek 实时对话'
+})
+
+async function loadSessions() {
+  const data = await fetchOverview()
+  sessions.value = data.sessions || []
+  online.value = true
+  if (draft.value && sessions.value.some((item) => item.id === draft.value.id)) {
+    draft.value = null
+  }
 }
 
-function createConversation() {
-  const now = Date.now()
-  conversations.value.unshift({
-    id: 'c' + now,
-    title: '新的对话',
-    preview: '',
-    updatedAt: '刚刚',
-    messages: [],
-  })
-  activeId.value = 'c' + now
-  search.value = ''
+async function loadMessages(id) {
+  loading.value = true
+  try {
+    const data = await fetchMessages(id)
+    messages.value = (data.messages || []).map((item) => ({
+      role: item.role,
+      content: item.content,
+    }))
+    online.value = true
+  } catch (error) {
+    if (error.status === 404) {
+      messages.value = []
+      return
+    }
+    online.value = false
+    message.error('加载消息失败：' + error.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+function newChat() {
+  const id = 'web-' + Math.random().toString(36).slice(2, 8)
+  draft.value = { id, title: '新的对话', updatedAt: new Date().toISOString() }
+  activeId.value = id
+  messages.value = []
   loading.value = false
+  search.value = ''
   mobileOpen.value = false
   nextTick(() => composerRef.value?.focus())
 }
 
-function removeConversation(id) {
-  const index = conversations.value.findIndex((item) => item.id === id)
-  if (index === -1) return
-  conversations.value.splice(index, 1)
-  if (activeId.value === id) {
-    if (conversations.value.length) {
-      activeId.value = conversations.value[0].id
-    } else {
-      createConversation()
-    }
+async function select(id) {
+  mobileOpen.value = false
+  if (id === activeId.value) return
+  activeId.value = id
+  if (draft.value && draft.value.id === id) {
+    messages.value = []
+    return
   }
-  message.success('已删除该会话（仅本地）')
+  await loadMessages(id)
 }
 
-function clearConversation() {
-  if (!active.value) return
-  active.value.messages = []
-  active.value.preview = ''
-  message.info('已清空当前对话（仅本地）')
+async function retry() {
+  try {
+    await loadSessions()
+    if (activeId.value && !(draft.value && draft.value.id === activeId.value)) {
+      await loadMessages(activeId.value)
+    } else if (!activeId.value) {
+      if (sessions.value.length) await select(sessions.value[0].id)
+      else newChat()
+    }
+    message.success('已重新连接后端')
+  } catch (error) {
+    message.error('仍然连不上后端：' + error.message)
+  }
 }
 
-function currentTime() {
-  const now = new Date()
-  return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-}
-
-function send(text) {
+async function send(text) {
   const content = String(text || '').trim()
-  if (!content || sending.value || !active.value) return
+  if (!content || sending.value) return
 
-  const conversation = active.value
-  conversation.messages.push({ role: 'user', content, time: currentTime() })
-  if (conversation.title === '新的对话') conversation.title = content.slice(0, 18)
-  conversation.preview = content.slice(0, 42)
-  conversation.updatedAt = '刚刚'
+  messages.value.push({ role: 'user', content, time: nowClock() })
+  const assistant = reactive({ role: 'assistant', content: '', time: '', streaming: true })
+  messages.value.push(assistant)
 
   sending.value = true
-  message.info('演示模式：消息还没有发送到后端')
-  clearTimeout(replyTimer)
-  replyTimer = setTimeout(() => {
-    conversation.messages.push({
-      role: 'assistant',
-      content: demoReplies[Math.floor(Math.random() * demoReplies.length)],
-      time: currentTime(),
+  const abort = new AbortController()
+  controller.value = abort
+
+  try {
+    await streamChat({
+      sessionId: activeId.value,
+      message: content,
+      signal: abort.signal,
+      onDelta: (_chunk, answer) => {
+        assistant.content = answer
+      },
     })
+    assistant.streaming = false
+    assistant.time = nowClock()
+    online.value = true
+    await loadSessions()
+  } catch (error) {
+    assistant.streaming = false
+    if (error.name === 'AbortError') {
+      assistant.time = nowClock()
+      if (!assistant.content) messages.value.pop()
+      loadSessions().catch(() => {})
+      return
+    }
+    // 后端整轮事务已回滚：本地也把这一轮撤掉，并把输入还给用户
+    if (!assistant.content) {
+      messages.value.splice(messages.value.length - 2, 2)
+      composerRef.value?.fill(content)
+    } else {
+      assistant.content += '\n\n（连接中断，回复可能不完整）'
+    }
+    online.value = false
+    message.error('发送失败：' + error.message)
+  } finally {
     sending.value = false
-  }, 900)
+    controller.value = null
+  }
+}
+
+function stop() {
+  controller.value?.abort()
+}
+
+async function removeSession(id) {
+  if (!id) return
+  try {
+    await deleteSession(id)
+    if (draft.value && draft.value.id === id) draft.value = null
+    await loadSessions()
+    if (activeId.value === id) {
+      if (sessions.value.length) await select(sessions.value[0].id)
+      else newChat()
+    }
+    message.success('会话已删除')
+  } catch (error) {
+    message.error('删除失败：' + error.message)
+  }
 }
 
 function pickSuggestion(text) {
   composerRef.value?.fill(text)
 }
 
+onMounted(async () => {
+  try {
+    await loadSessions()
+    if (sessions.value.length) await select(sessions.value[0].id)
+    else newChat()
+  } catch (error) {
+    online.value = false
+    newChat()
+    message.error('后端未连接：' + error.message)
+  }
+})
+
 onBeforeUnmount(() => {
-  clearTimeout(loadTimer)
-  clearTimeout(replyTimer)
+  controller.value?.abort()
 })
 </script>
 
@@ -131,10 +226,11 @@ onBeforeUnmount(() => {
       :search="search"
       :theme="theme"
       :open="mobileOpen"
+      :online="online"
       @update:search="search = $event"
       @select="select"
-      @new="createConversation"
-      @remove="removeConversation"
+      @new="newChat"
+      @remove="removeSession"
       @toggle-theme="$emit('toggle-theme')"
       @close="mobileOpen = false"
     />
@@ -145,25 +241,30 @@ onBeforeUnmount(() => {
 
     <main class="main">
       <ChatHeader
-        :title="active ? active.title : '对话'"
-        :subtitle="active && active.messages.length ? active.preview : '与 DeepSeek 实时对话'"
-        :count="active ? active.messages.length : 0"
+        :title="activeTitle"
+        :subtitle="subtitle"
+        :count="messages.length"
         @menu="mobileOpen = true"
-        @clear="clearConversation"
+        @clear="removeSession(activeId)"
       />
 
+      <div v-if="!online" class="offline-bar">
+        <span>后端未连接（127.0.0.1:8000），检查服务是否已启动</span>
+        <button @click="retry">重试</button>
+      </div>
+
       <section class="messages-wrap">
-        <MessageList
-          :messages="messages"
-          :loading="loading"
-          :sending="sending"
-          @pick="pickSuggestion"
-        />
+        <MessageList :messages="messages" :loading="loading" @pick="pickSuggestion" />
       </section>
 
       <footer class="composer-wrap">
-        <ChatComposer ref="composerRef" :disabled="sending || !active" @send="send" />
-        <p class="composer-note">前端演示界面 · 尚未接入 /chat 接口</p>
+        <ChatComposer
+          ref="composerRef"
+          :sending="sending"
+          @send="send"
+          @stop="stop"
+        />
+        <p class="composer-note">对话会保存到 SQLite，刷新或重启服务后仍然在</p>
       </footer>
     </main>
   </div>
@@ -184,6 +285,30 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   height: 100vh;
+}
+
+.offline-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 24px;
+  font-size: 11.5px;
+  color: #ffb4b4;
+  background: rgba(240, 97, 109, 0.12);
+  border-bottom: 1px solid rgba(240, 97, 109, 0.28);
+}
+
+.offline-bar button {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 180, 180, 0.4);
+  color: #ffd7d7;
+  font-size: 11px;
+}
+
+.offline-bar button:hover {
+  background: rgba(240, 97, 109, 0.2);
 }
 
 .messages-wrap {
@@ -216,6 +341,9 @@ onBeforeUnmount(() => {
   }
   .composer-wrap {
     padding: 0 14px 12px;
+  }
+  .offline-bar {
+    padding: 8px 14px;
   }
 }
 </style>

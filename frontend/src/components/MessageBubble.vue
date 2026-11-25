@@ -10,6 +10,10 @@ const copiedIndex = ref(-1)
 let copyTimer = null
 
 const isUser = computed(() => props.message.role === 'user')
+const isStreaming = computed(() => Boolean(props.message.streaming))
+const isEmptyStreaming = computed(
+  () => isStreaming.value && !String(props.message.content || '').trim(),
+)
 
 const blocks = computed(() => {
   const parts = String(props.message.content || '').split('\u0060\u0060\u0060')
@@ -54,20 +58,24 @@ async function copyCode(block, index) {
         <span v-if="message.time" class="time">{{ message.time }}</span>
       </div>
 
-      <div class="bubble">
-        <template v-for="(block, index) in blocks" :key="index">
-          <div v-if="block.type === 'code'" class="code-block">
-            <div class="code-head">
-              <span class="code-lang">{{ block.lang }}</span>
-              <button class="code-copy" @click="copyCode(block, index)">
-                <Check v-if="copiedIndex === index" :size="12" />
-                <Copy v-else :size="12" />
-                <span>{{ copiedIndex === index ? '已复制' : '复制' }}</span>
-              </button>
+      <div class="bubble" :class="{ streaming: isStreaming }">
+        <span v-if="isEmptyStreaming" class="dots"><i /><i /><i /></span>
+        <template v-else>
+          <template v-for="(block, index) in blocks" :key="index">
+            <div v-if="block.type === 'code'" class="code-block">
+              <div class="code-head">
+                <span class="code-lang">{{ block.lang }}</span>
+                <button class="code-copy" @click="copyCode(block, index)">
+                  <Check v-if="copiedIndex === index" :size="12" />
+                  <Copy v-else :size="12" />
+                  <span>{{ copiedIndex === index ? '已复制' : '复制' }}</span>
+                </button>
+              </div>
+              <pre><code>{{ block.code }}</code></pre>
             </div>
-            <pre><code>{{ block.code }}</code></pre>
-          </div>
-          <p v-else class="text">{{ block.text }}</p>
+            <p v-else class="text">{{ block.text }}</p>
+          </template>
+          <span v-if="isStreaming" class="caret" />
         </template>
       </div>
     </div>
@@ -152,6 +160,57 @@ async function copyCode(block, index) {
   color: #fff;
   background: var(--user-bubble);
   box-shadow: 0 10px 26px var(--accent-glow);
+}
+
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+}
+
+.dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: dot-blink 1.2s infinite ease-in-out;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-blink {
+  0%, 80%, 100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 .text {
