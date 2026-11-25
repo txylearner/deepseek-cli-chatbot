@@ -9,6 +9,23 @@
 > 前端已通过 Vite 代理接上后端：**先启动 `backend/`（8000），再启动 `frontend/`（5173）**，
 > 会话列表、历史消息、流式对话、删除会话都是真实数据，接口说明见 [frontend/README.md](frontend/README.md)。
 
+## 一键启动（推荐）
+
+在仓库根目录执行一条命令，后端和前端一起起来：
+
+~~~powershell
+.\start.ps1
+~~~
+
+脚本会依次启动 uvicorn（8000）与 vite（5173），等两者就绪后自动打开浏览器；
+按 `Ctrl+C` 同时停止两个服务。不想自动开浏览器就加 `-NoBrowser`：
+
+~~~powershell
+.\start.ps1 -NoBrowser
+~~~
+
+> 首次使用前仍需各装一次依赖：`cd backend; pip install -e ".[dev]"`、`cd frontend; npm install`。
+
 ## 目录结构
 
 ~~~text
